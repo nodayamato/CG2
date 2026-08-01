@@ -16,10 +16,14 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <cassert>
+// デバッグ用のライブラリ
+#include <dbghelp.h>
+#include <strsafe.h>
 #pragma warning(pop)
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "Dbghelp.lib")
 
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
@@ -37,6 +41,63 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 
     // 標準のメッセージ処理を行う
     return DefWindowProc(hwnd, msg, wparam, lparam);
+}
+
+static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
+    // 時刻を取得して、時刻を名前に入れたファイルを作成。Dumpsディレクトリ以下に出力
+    SYSTEMTIME time;
+    GetLocalTime(&time);
+
+    wchar_t filePath[MAX_PATH] = { 0 };
+
+    CreateDirectory(L"./Dumps", nullptr);
+
+    StringCchPrintf(
+        filePath,
+        MAX_PATH,
+        L"./Dumps/%04d-%02d%02d-%02d%02d%02d.dmp",
+        time.wYear,
+        time.wMonth,
+        time.wDay,
+        time.wHour,
+        time.wMinute,
+        time.wSecond
+    );
+
+    HANDLE dumpFileHandle = CreateFile(
+        filePath,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_WRITE | FILE_SHARE_READ,
+        0,
+        CREATE_ALWAYS,
+        0,
+        0
+    );
+
+    // processId（このexeのID）とクラッシュ（例外）の発生したthreadIdを取得
+    DWORD processId = GetCurrentProcessId();
+    DWORD threadId = GetCurrentThreadId();
+
+    // 設定情報を入力
+    MINIDUMP_EXCEPTION_INFORMATION minidumpInformation{};
+    minidumpInformation.ThreadId = threadId;
+    minidumpInformation.ExceptionPointers = exception;
+    minidumpInformation.ClientPointers = TRUE;
+
+    // Dumpを出力
+    MiniDumpWriteDump(
+        GetCurrentProcess(),
+        processId,
+        dumpFileHandle,
+        MiniDumpNormal,
+        &minidumpInformation,
+        nullptr,
+        nullptr
+    );
+
+    CloseHandle(dumpFileHandle);
+
+    return EXCEPTION_EXECUTE_HANDLER;
 }
 
 /// <summary>
@@ -71,6 +132,9 @@ void Log(const std::wstring& message)
 
 // Windowsアプリのエントリーポイント(main関数)
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+
+    // Dump出力を設定
+	SetUnhandledExceptionFilter(ExportDump);
 
 	// ------------------------------
 	// ウィンドウ関連の初期化
@@ -217,9 +281,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // 初期化完了のログ
     Log(logStream, "Complete create D3D12Device!!!\n");
 
+    // ------------------------------
+	// ゲームループ
+    // ------------------------------
 
-
-	// デバッグ出力
     Log(logStream, "Hello\n");
     Log(logStream, "PlayerHP : " + std::to_string(100));
 
