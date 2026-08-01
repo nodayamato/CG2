@@ -2,8 +2,16 @@
 // C4023の警告を無効化する
 #pragma warning(disable:4023)
 #include <Windows.h>
+// 標準入出力を扱うライブラリ
 #include <cstdint>
+// 文字列を扱うライブラリ
 #include <string>
+// ファイルやディレクトリに関する操作を行うライブラリ
+#include <filesystem>
+// ファイルに書いたり読むためのライブラリ
+#include <fstream>
+// 時間に関するライブラリ
+#include <chrono>
 #pragma warning(pop)
 
 // ウィンドウプロシージャ
@@ -27,9 +35,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 /// <summary>
 /// デバッグ出力を行う
 /// </summary>
-/// <param name="message">出力するメッセージ</param>
-void Log(const std::string& message)
+/// <param name="os">出力先のストリーム</param>
+/// <param name="message">出力する文字列</param>
+void Log(std::ostream& os, const std::string& message)
 {
+    os << message << std::endl;
 	// デバッグ出力
     OutputDebugStringA(message.c_str());
 }
@@ -37,6 +47,10 @@ void Log(const std::string& message)
 // Windowsアプリのエントリーポイント(main関数)
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
+	// ------------------------------
+	// ウィンドウ関連の初期化
+    // ------------------------------
+    
     // クライアント領域のサイズ
     const int32_t kClientWidth = 1280;
     const int32_t kClientHeight = 720;
@@ -71,13 +85,32 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         wc.hInstance,              // インスタンスハンドル
         nullptr                    // オプション
     );
-
     // ウィンドウを表示する
     ShowWindow(hwnd, SW_SHOW);
 
+    // ------------------------------
+	//  ログ関連の初期化
+    // ------------------------------
+
+    // logsフォルダを作る
+    std::filesystem::create_directory("logs");
+    // 現在時刻を取得（UTC）
+    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+    // 秒単位に変換
+    auto nowSeconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
+    // ローカル時間へ変換
+    std::chrono::zoned_time localTime{ std::chrono::current_zone(), nowSeconds };
+    // ファイル名用の日時文字列
+    std::string dateString = std::format("{:%Y%m%d_%H%M%S}", localTime);
+    // ログファイル名
+    std::string logFilePath = "logs/" + dateString + ".log";
+    // ログファイルを開く
+    std::ofstream logStream(logFilePath);
+
+
 	// デバッグ出力
-    Log("Hello World!\n");
-    Log("PlayerHP : " + std::to_string(100) + "\n");
+    Log(logStream, "Hello\n");
+    Log(logStream, "PlayerHP : " + std::to_string(100));
 
 	MSG msg{};
 	// ウィンドウのXボタンが押されるまでループする
