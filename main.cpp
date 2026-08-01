@@ -3,6 +3,7 @@
 #pragma warning(disable:4023)
 #include <Windows.h>
 #include <cstdint>
+#include <string>
 #pragma warning(pop)
 
 // ウィンドウプロシージャ
@@ -21,6 +22,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 
     // 標準のメッセージ処理を行う
     return DefWindowProc(hwnd, msg, wparam, lparam);
+}
+
+/// <summary>
+/// デバッグ出力を行う
+/// </summary>
+/// <param name="message">出力するメッセージ</param>
+void Log(const std::string& message)
+{
+	// デバッグ出力
+    OutputDebugStringA(message.c_str());
 }
 
 // Windowsアプリのエントリーポイント(main関数)
@@ -64,6 +75,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // ウィンドウを表示する
     ShowWindow(hwnd, SW_SHOW);
 
+	// デバッグ出力
+    Log("Hello World!\n");
+    Log("PlayerHP : " + std::to_string(100) + "\n");
 
 	MSG msg{};
 	// ウィンドウのXボタンが押されるまでループする
@@ -76,9 +90,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// ゲームの処理
         }
 	}
-
-	// 出力ウィンドウへの文字出力
-	OutputDebugStringA("Hello,DirectX!\n");
 
 	return 0;
 }
