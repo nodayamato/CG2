@@ -3,6 +3,7 @@
 #pragma warning(disable:4023)
 #include <Windows.h>
 #include "ConvertString.h"
+#include "Math.h"
 // 標準入出力を扱うライブラリ
 #include <cstdint>
 // 文字列を扱うライブラリ
@@ -28,12 +29,6 @@
 #pragma comment(lib, "Dbghelp.lib")
 #pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "dxcompiler.lib")
-
-// 4次元ベクトル
-struct Vector4
-{
-	float x, y, z, w;
-};
 
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
@@ -732,17 +727,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// RootParameter作成
-	D3D12_ROOT_PARAMETER rootParameters[1] = {};
-
-	// CBVを使う
+	D3D12_ROOT_PARAMETER rootParameters[2] = {};
+	// CBVを設定
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-
-	// PixelShaderで使う
+	// PixelShaderを設定
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-	// b0を使う
+	// b0を設定
 	rootParameters[0].Descriptor.ShaderRegister = 0;
-
+	// CBVを設定
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	// VertexShaderを設定
+	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	// b0を設定
+	rootParameters[1].Descriptor.ShaderRegister = 0;
 	// RootSignatureへ設定
 	descriptionRootSignature.pParameters = rootParameters;
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
@@ -886,6 +883,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 今回は赤を書き込む
 	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
+	// WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
+	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+
+	// データを書き込む
+	Matrix4x4* wvpData = nullptr;
+
+	// 書き込むためのアドレスを取得
+	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
+
+	// 単位行列を書き込んでおく
+	*wvpData = MakeIdentity4x4();
+
+	// Transform変数を作る
+	Transform transform{
+		{1.0f, 1.0f, 1.0f},
+		{0.0f, 0.0f, 0.0f},
+		{0.0f, 0.0f, 0.0f}
+	};
+	// CameraTransform変数を作る
+	Transform cameraTransform{
+		{1.0f, 1.0f, 1.0f},
+		{0.0f, 0.0f, 0.0f},
+		{0.0f, 0.0f, -5.0f}
+	};
+
 	// ------------------------------
 	// 描画に必要な情報をまとめる
 	// ------------------------------
@@ -924,6 +946,37 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	MSG msg{};
 	// ウィンドウのXボタンが押されるまでループする
 	while (msg.message != WM_QUIT) {
+		// 回転角度を更新する
+		transform.rotate.y += 0.03f;
+
+		Matrix4x4 worldMatrix =
+			MakeAffineMatrix(
+				transform.scale,
+				transform.rotate,
+				transform.translate);
+
+		Matrix4x4 cameraMatrix =
+			MakeAffineMatrix(
+				cameraTransform.scale,
+				cameraTransform.rotate,
+				cameraTransform.translate);
+
+		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+
+		Matrix4x4 projectionMatrix =
+			MakePerspectiveFovMatrix(
+				0.45f,
+				float(kClientWidth) / float(kClientHeight),
+				0.1f,
+				100.0f);
+
+		Matrix4x4 worldViewProjectionMatrix =
+			Multiply(
+				worldMatrix,
+				Multiply(viewMatrix, projectionMatrix));
+
+		*wvpData = worldViewProjectionMatrix;
+
 		// Windowにメッセージが来ていたら最優先で処理させる
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
@@ -999,6 +1052,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+
+			// WVP用CBufferの場所を設定
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
 			// 描画
 			commandList->DrawInstanced(3, 1, 0, 0);
