@@ -2,7 +2,9 @@
 // C4023の警告を無効化する
 #pragma warning(disable:4023)
 #include <Windows.h>
+#include "ConvertString.h"
 #include <cstdint>
+#include <format>
 #include <string>
 #pragma warning(pop)
 
@@ -30,8 +32,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
 /// <param name="message">出力するメッセージ</param>
 void Log(const std::string& message)
 {
-	// デバッグ出力
     OutputDebugStringA(message.c_str());
+}
+
+/// <summary>
+/// ワイド文字列版のデバッグ出力
+/// </summary>
+/// <param name="message">出力するワイド文字列</param>
+void Log(const std::wstring& message)
+{
+    // std::wstring → std::stringへ変換して既存のLogを利用
+    Log(ConvertString(message));
 }
 
 // Windowsアプリのエントリーポイント(main関数)
@@ -75,9 +86,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
     // ウィンドウを表示する
     ShowWindow(hwnd, SW_SHOW);
 
-	// デバッグ出力
+    // デバッグ出力
     Log("Hello World!\n");
-    Log("PlayerHP : " + std::to_string(100) + "\n");
+    // std::formatを使用
+    Log(std::format("PlayerHP : {}\n", 100));
+    // std::wstring版Logの確認
+    Log(L"Hello Wide World!\n");
 
 	MSG msg{};
 	// ウィンドウのXボタンが押されるまでループする
