@@ -1,5 +1,11 @@
 #pragma once
 
+// 2次元ベクトル
+struct Vector2 {
+	float x;
+	float y;
+};
+
 // 3次元ベクトル
 struct Vector3 {
 	float x;
@@ -13,6 +19,12 @@ struct Vector4 {
 	float y;
 	float z;
 	float w;
+};
+
+// 頂点データ
+struct VertexData {
+	Vector4 position;
+	Vector2 texcoord;
 };
 
 // 4x4行列
