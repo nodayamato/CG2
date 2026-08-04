@@ -21,15 +21,39 @@ struct Vector4 {
 	float w;
 };
 
+// マテリアル情報
+struct Material {
+	Vector4 color;
+	int enableLighting;
+};
+
 // 頂点データ
 struct VertexData {
 	Vector4 position;
 	Vector2 texcoord;
+	Vector3 normal;
+};
+
+// 平行光源
+struct DirectionalLight
+{
+	// ライトの色
+	Vector4 color;
+	// ライトの向き
+	Vector3 direction;
+	// ライトの明るさ
+	float intensity;
 };
 
 // 4x4行列
 struct Matrix4x4 {
 	float m[4][4];
+};
+
+// ワールド行列、ビュー行列、射影行列をまとめた構造体
+struct TransformationMatrix {
+	Matrix4x4 WVP;
+	Matrix4x4 World;
 };
 
 // 3Dオブジェクトの変換情報
