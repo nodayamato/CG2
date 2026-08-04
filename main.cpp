@@ -16,6 +16,7 @@
 #include <chrono>
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#include <wrl.h>
 #include <cassert>
 // デバッグ用のライブラリ
 #include <dbghelp.h>
@@ -545,6 +546,42 @@ ID3D12Resource* CreateDepthStencilTextureResource(
 	return resource;
 }
 
+/// <summary>
+/// CPUデスクリプタハンドルを取得する
+/// </summary>
+/// <param name="descriptorHeap">デスクリプタヒープ</param>
+/// <param name="descriptorSize">デスクリプタのサイズ</param>
+/// <param name="index">インデックス</param>
+/// <returns>取得したCPUデスクリプタハンドル</returns>
+D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(
+	ID3D12DescriptorHeap* descriptorHeap,
+	uint32_t descriptorSize,
+	uint32_t index)
+{
+	D3D12_CPU_DESCRIPTOR_HANDLE handle =
+		descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	handle.ptr += descriptorSize * index;
+	return handle;
+}
+
+/// <summary>
+/// GPUデスクリプタハンドルを取得する
+/// </summary>
+/// <param name="descriptorHeap">デスクリプタヒープ</param>
+/// <param name="descriptorSize">デスクリプタのサイズ</param>
+/// <param name="index">インデックス</param>
+/// <returns>取得したGPUデスクリプタハンドル</returns>
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(
+	ID3D12DescriptorHeap* descriptorHeap,
+	uint32_t descriptorSize,
+	uint32_t index)
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE handle =
+		descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	handle.ptr += descriptorSize * index;
+	return handle;
+}
+
 // Windowsアプリのエントリーポイント(main関数)
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
@@ -714,6 +751,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// デバイスの生成がうまくいかなかったので起動できない
 	assert(device != nullptr);
+
+	// デスクリプタのサイズを取得
+	const uint32_t descriptorSizeSRV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	const uint32_t descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
 	// 初期化完了のログ
 	Log(logStream, "Complete create D3D12Device!!!\n");
@@ -901,8 +943,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D; // 2Dテクスチャとして書き込む
 
 	// ディスクリプタの先頭を取得する
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvStartHandle =
-		rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvStartHandle = GetCPUDescriptorHandle(rtvDescriptorHeap, descriptorSizeRTV, 0);
 
 	// RTVを2つ作るのでディスクリプタを2つ用意
 	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[2];
@@ -1409,6 +1450,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
 	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
 
+	// 2枚目のTexture
+	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
+	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
+	ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
+	ID3D12Resource* intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
+
 	// metaDataを基にSRVの設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = metadata.format;
@@ -1426,6 +1473,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// SRVの生成
 	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
+
+	// 2枚目のSRV
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2{};
+	srvDesc2.Format = metadata2.format;
+	srvDesc2.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc2.Texture2D.MipLevels = UINT(metadata2.mipLevels);
+
+	// インデックス2に作る
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 2);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 2);
+
+	// SRVの生成
+	device->CreateShaderResourceView(textureResource2, &srvDesc2, textureSrvHandleCPU2);
+
+	// どちらのTextureを使うかのフラグ
+	bool useMonsterBall = true;
 
 	// ------------------------------
 	// ImGuiの初期化
@@ -1513,6 +1577,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// 色を編集する
 		ImGui::ColorEdit4("Color", &materialData->x);
+		// どちらのTextureを使うかのフラグ
+		ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
 		ImGui::End();
 
@@ -1605,11 +1671,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// WVP用CBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
-			// Texture(SRV)をセット
-			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+			// どちらのTextureを使うかのフラグに応じてSRVを設定
+			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			// 描画
 			commandList->DrawInstanced(kVertexCount, 1, 0, 0);
+
+			// フラグが変わってもspriteを変えない
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			// ---------------------
 			// Sprite描画
@@ -1696,9 +1765,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #endif
 
 	intermediateResource->Release();
+	intermediateResource2->Release();
 	wvpResource->Release();
 	vertexResource->Release();
 	textureResource->Release();
+	textureResource2->Release();
 	depthStencilResource->Release();
 	graphicsPipelineState->Release();
 	signatureBlob->Release();
