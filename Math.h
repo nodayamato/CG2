@@ -53,3 +53,6 @@ Matrix4x4 Inverse(const Matrix4x4& m);
 
 // 透視投影行列を作成する
 Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip);
+
+// 正射影行列を作成する
+Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
