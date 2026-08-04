@@ -23,6 +23,7 @@
 #include <dxgidebug.h>
 #include <dxcapi.h>
 #include <vector>
+#include <numbers>
 #pragma warning(pop)
 
 #pragma comment(lib, "d3d12.lib")
@@ -552,6 +553,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// Dump出力を設定
 	SetUnhandledExceptionFilter(ExportDump);
+
+	// 分割数
+	const uint32_t kSubdivision = 16;
+	const uint32_t kVertexCount = kSubdivision * kSubdivision * 6;
 
 	// ------------------------------
 	// ウィンドウ関連の初期化
@@ -1163,7 +1168,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ------------------------------
 
 	// 頂点リソースを作成
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * kVertexCount);
 
 	// 頂点バッファビュー
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
@@ -1188,7 +1193,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
 
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * kVertexCount;
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
 	// 頂点リソースにデータを書き込む
@@ -1230,29 +1235,77 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexDataSprite[5].position = { 640.0f,360.0f,0.0f,1.0f };
 	vertexDataSprite[5].texcoord = { 1.0f,1.0f };
 
-	// 左下
-	vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
-	vertexData[0].texcoord = { 0.0f, 1.0f };
+	// ------------------------------
+	// 球の頂点データを作る
+	// ------------------------------
 
-	// 上
-	vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
-	vertexData[1].texcoord = { 0.5f, 0.0f };
+	const float kLonEvery = 2.0f * std::numbers::pi_v<float> / float(kSubdivision);
+	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
 
-	// 右下
-	vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
-	vertexData[2].texcoord = { 1.0f, 1.0f };
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex)
+	{
+		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;
 
-	// 左下2
-	vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f };
-	vertexData[3].texcoord = { 0.0f, 1.0f };
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex)
+		{
+			float lon = lonIndex * kLonEvery;
 
-	// 上2
-	vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f };
-	vertexData[4].texcoord = { 0.5f, 0.0f };
+			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
 
-	// 右下2
-	vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f };
-	vertexData[5].texcoord = { 1.0f, 1.0f };
+			float lat2 = lat + kLatEvery;
+			float lon2 = lon + kLonEvery;
+
+			Vector4 a = {
+				cosf(lat) * cosf(lon),
+				sinf(lat),
+				cosf(lat) * sinf(lon),
+				1.0f
+			};
+
+			Vector4 b = {
+				cosf(lat2) * cosf(lon),
+				sinf(lat2),
+				cosf(lat2) * sinf(lon),
+				1.0f
+			};
+
+			Vector4 c = {
+				cosf(lat) * cosf(lon2),
+				sinf(lat),
+				cosf(lat) * sinf(lon2),
+				1.0f
+			};
+
+			Vector4 d = {
+				cosf(lat2) * cosf(lon2),
+				sinf(lat2),
+				cosf(lat2) * sinf(lon2),
+				1.0f
+			};
+
+			vertexData[start + 0].position = a;
+			vertexData[start + 1].position = b;
+			vertexData[start + 2].position = c;
+
+			vertexData[start + 3].position = c;
+			vertexData[start + 4].position = b;
+			vertexData[start + 5].position = d;
+
+			float u = float(lonIndex) / float(kSubdivision);
+			float v = 1.0f - float(latIndex) / float(kSubdivision);
+
+			float u2 = float(lonIndex + 1) / float(kSubdivision);
+			float v2 = 1.0f - float(latIndex + 1) / float(kSubdivision);
+
+			vertexData[start + 0].texcoord = { u, v };
+			vertexData[start + 1].texcoord = { u, v2 };
+			vertexData[start + 2].texcoord = { u2, v };
+
+			vertexData[start + 3].texcoord = { u2, v };
+			vertexData[start + 4].texcoord = { u, v2 };
+			vertexData[start + 5].texcoord = { u2, v2 };
+		}
+	}
 
 	// ------------------------------
 	// Material用リソースを作る
@@ -1292,7 +1345,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Transform cameraTransform{
 		{1.0f, 1.0f, 1.0f},
 		{0.0f, 0.0f, 0.0f},
-		{0.0f, 0.0f, -5.0f}
+		{0.0f, 0.0f, -10.0f}
 	};
 
 	// --------------------------------
@@ -1458,7 +1511,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ImGuiのウィンドウを表示する
 		ImGui::Begin("Material");
 
-		// 三角形の色を編集する
+		// 色を編集する
 		ImGui::ColorEdit4("Color", &materialData->x);
 
 		ImGui::End();
@@ -1556,7 +1609,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			// 描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			commandList->DrawInstanced(kVertexCount, 1, 0, 0);
 
 			// ---------------------
 			// Sprite描画
