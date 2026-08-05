@@ -8,3 +8,5 @@ subresources
 Subresource
 continous
 miplevel
+normals
+texcoords

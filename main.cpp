@@ -4,6 +4,8 @@
 #include <Windows.h>
 #include "ConvertString.h"
 #include "Math.h"
+#include "ModelData.h"
+#include <cstring>
 // 標準入出力を扱うライブラリ
 #include <cstdint>
 // 文字列を扱うライブラリ
@@ -590,15 +592,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// Dump出力を設定
 	SetUnhandledExceptionFilter(ExportDump);
-
-	// 分割数
-	const uint32_t kSubdivision = 16;
-	// 球の頂点数
-	// 1つの四角形につき4頂点
-	const uint32_t kVertexCount = kSubdivision * kSubdivision * 4;
-	// 球のIndex数
-	// 1つの四角形につき三角形2枚、Indexは6個
-	const uint32_t kIndexCount = kSubdivision * kSubdivision * 6;
 
 	// ------------------------------
 	// ウィンドウ関連の初期化
@@ -1304,206 +1297,48 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	indexDataSprite[5] = 2;
 
 	// ------------------------------
-	// 球の頂点リソースを作成
+	// OBJモデルを読み込む
 	// ------------------------------
 
-	// 頂点リソースを作成
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * kVertexCount);
-	// 頂点バッファビュー
+	// resourcesフォルダにあるplane.objを読み込む
+	ModelData modelData = LoadObjFile("resources", "plane.obj");
+
+	// OBJファイルに頂点が入っていることを確認する
+	assert(!modelData.vertices.empty());
+
+	// ------------------------------
+	// モデル用頂点リソースを作成
+	// ------------------------------
+
+	// 読み込んだモデルの頂点数に合わせて頂点バッファを作る
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
+
+	// モデル用頂点バッファビューを作る
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-	// GPUアドレス
+
+	// 頂点リソースのGPUアドレスを設定する
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-	// バッファサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * kVertexCount;
-	// 1頂点サイズ
+
+	// 頂点バッファ全体のサイズを設定する
+	vertexBufferView.SizeInBytes = static_cast<UINT>(sizeof(VertexData) * modelData.vertices.size());
+
+	// 1頂点分のサイズを設定する
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
 	// ------------------------------
-	// 球用IndexResourceを作る
+	// モデルの頂点データを書き込む
 	// ------------------------------
 
-	// 球用IndexResourceを作成
-	ID3D12Resource* indexResource = CreateBufferResource(device, sizeof(uint32_t) * kIndexCount);
-
-	// 球用IndexBufferViewを作成
-	D3D12_INDEX_BUFFER_VIEW indexBufferView{};
-
-	// IndexResourceのGPUアドレスを設定
-	indexBufferView.BufferLocation = indexResource->GetGPUVirtualAddress();
-
-	// IndexBuffer全体のサイズ
-	indexBufferView.SizeInBytes = sizeof(uint32_t) * kIndexCount;
-
-	// Index1個の形式はuint32_t
-	indexBufferView.Format = DXGI_FORMAT_R32_UINT;
-
-	// ------------------------------
-	// 球の頂点データとIndexデータを作る
-	// ------------------------------
-
-	// 頂点リソースにデータを書き込む
+	// 頂点リソースの書き込み先
 	VertexData* vertexData = nullptr;
-	// 書き込むためのアドレスを取得
-	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 
-	// 球用IndexResourceの書き込み先
-	uint32_t* indexData = nullptr;
-	// CPUからIndexを書き込めるようにMapする
-	indexResource->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
+	// CPUから書き込むためにMapする
+	HRESULT vertexMapResult = vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 
-	// 経度分割1つ分の角度
-	const float kLonEvery = 2.0f * std::numbers::pi_v<float> / float(kSubdivision);
+	assert(SUCCEEDED(vertexMapResult));
 
-	// 緯度分割1つ分の角度
-	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
-
-	// 緯度方向
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex)
-	{
-		// 現在の緯度
-		const float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * float(latIndex);
-
-		// 次の緯度
-		const float latNext = lat + kLatEvery;
-
-		// 経度方向
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex)
-		{
-			// 現在の経度
-			const float lon = kLonEvery * float(lonIndex);
-
-			// 次の経度
-			const float lonNext = lon + kLonEvery;
-
-			// 1つの四角形につき4頂点
-			const uint32_t vertexStart = (latIndex * kSubdivision + lonIndex) * 4;
-
-			// 1つの四角形につき6Index
-			const uint32_t indexStart = (latIndex * kSubdivision + lonIndex) * 6;
-
-			// ------------------------------
-			// 頂点a：左下
-			// ------------------------------
-
-			vertexData[vertexStart + 0].position = {
-				cosf(lat) * cosf(lon),
-				sinf(lat),
-				cosf(lat) * sinf(lon),
-				1.0f
-			};
-
-			vertexData[vertexStart + 0].texcoord = {
-				float(lonIndex) /
-					float(kSubdivision),
-
-				1.0f -
-				float(latIndex) /
-					float(kSubdivision)
-			};
-
-			vertexData[vertexStart + 0].normal = {
-				vertexData[vertexStart + 0].position.x,
-				vertexData[vertexStart + 0].position.y,
-				vertexData[vertexStart + 0].position.z
-			};
-
-			// ------------------------------
-			// 頂点b：左上
-			// ------------------------------
-
-			vertexData[vertexStart + 1].position = {
-				cosf(latNext) * cosf(lon),
-				sinf(latNext),
-				cosf(latNext) * sinf(lon),
-				1.0f
-			};
-
-			vertexData[vertexStart + 1].texcoord = {
-				float(lonIndex) /
-					float(kSubdivision),
-
-				1.0f -
-				float(latIndex + 1) /
-					float(kSubdivision)
-			};
-
-			vertexData[vertexStart + 1].normal = {
-				vertexData[vertexStart + 1].position.x,
-				vertexData[vertexStart + 1].position.y,
-				vertexData[vertexStart + 1].position.z
-			};
-
-			// ------------------------------
-			// 頂点c：右下
-			// ------------------------------
-
-			vertexData[vertexStart + 2].position = {
-				cosf(lat) * cosf(lonNext),
-				sinf(lat),
-				cosf(lat) * sinf(lonNext),
-				1.0f
-			};
-
-			vertexData[vertexStart + 2].texcoord = {
-				float(lonIndex + 1) /
-					float(kSubdivision),
-
-				1.0f -
-				float(latIndex) /
-					float(kSubdivision)
-			};
-
-			vertexData[vertexStart + 2].normal = {
-				vertexData[vertexStart + 2].position.x,
-				vertexData[vertexStart + 2].position.y,
-				vertexData[vertexStart + 2].position.z
-			};
-
-			// ------------------------------
-			// 頂点d：右上
-			// ------------------------------
-
-			vertexData[vertexStart + 3].position = {
-				cosf(latNext) * cosf(lonNext),
-				sinf(latNext),
-				cosf(latNext) * sinf(lonNext),
-				1.0f
-			};
-
-			vertexData[vertexStart + 3].texcoord = {
-				float(lonIndex + 1) /
-					float(kSubdivision),
-
-				1.0f -
-				float(latIndex + 1) /
-					float(kSubdivision)
-			};
-
-			vertexData[vertexStart + 3].normal = {
-				vertexData[vertexStart + 3].position.x,
-				vertexData[vertexStart + 3].position.y,
-				vertexData[vertexStart + 3].position.z
-			};
-
-			// ------------------------------
-			// 球のIndexデータ
-			// ------------------------------
-
-			// 1枚目の三角形
-			indexData[indexStart + 0] = vertexStart + 0;
-
-			indexData[indexStart + 1] = vertexStart + 1;
-
-			indexData[indexStart + 2] = vertexStart + 2;
-
-			// 2枚目の三角形
-			indexData[indexStart + 3] = vertexStart + 1;
-
-			indexData[indexStart + 4] = vertexStart + 3;
-
-			indexData[indexStart + 5] = vertexStart + 2;
-		}
-	}
+	// LoadObjFileで読み込んだ全頂点を頂点リソースへコピーする
+	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData)* modelData.vertices.size());
 
 	// ------------------------------
 	// Material用リソースを作る
@@ -1651,7 +1486,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
 
 	// 2枚目のTexture
-	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
+	DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
 	ID3D12Resource* intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
@@ -1733,8 +1568,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 #endif
 
-		// 回転角度を更新する
-		transform.rotate.y += 0.03f;
 		// ワールド行列を作る
 		Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 		// カメラの行列を作る
@@ -1774,10 +1607,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef USE_IMGUI
 
 		// ImGuiのウィンドウを表示する
-		ImGui::ShowDemoWindow();
+		//ImGui::ShowDemoWindow();
 
 		// ImGuiのウィンドウを表示する
 		ImGui::Begin("Material");
+
+		// モデルの回転角度を編集する
+		ImGui::DragFloat3("ModelRotate", &transform.rotate.x, 0.01f);
 
 		// 色を編集する
 		ImGui::ColorEdit4("Color", &materialData->color.x);
@@ -1788,8 +1624,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		ImGui::ColorEdit4("Light Color", &directionalLightData->color.x);
 		// ライトの向き
 		ImGui::DragFloat3("Light Direction", &directionalLightData->direction.x, 0.01f);
-		// ライトの明るさ
-		ImGui::DragFloat("Light Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 10.0f);
 
 		ImGui::End();
 
@@ -1893,30 +1727,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 描画する形状を三角形リストに設定
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			// ----------------------
-			// 球の描画
-			// ----------------------
+			// ---------------------
+			// OBJモデルの描画
+			// ---------------------
 
-			// 球用VBVを設定
+			// OBJモデル用の頂点バッファを設定する
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
-			// 球用IBVを設定
-			commandList->IASetIndexBuffer(&indexBufferView);
-
-			// 球用Materialを設定
+			// OBJモデル用Materialを設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
-			// 球用TransformationMatrixを設定
+			// OBJモデル用TransformationMatrixを設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
 			// 平行光源を設定
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
 
-			// 球に使うTextureを設定
+			// 使うTextureを設定
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
-			// Indexを使って球を描画
-			commandList->DrawIndexedInstanced(kIndexCount, 1, 0, 0, 0);
+			// OBJモデルを描画する
+			// LoadObjFileで面を頂点列へ展開済みなのでDrawInstancedを使う
+			commandList->DrawInstanced(static_cast<UINT>(modelData.vertices.size()), 1, 0, 0);
 
 			// フラグが変わってもspriteを変えない
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
@@ -1942,7 +1774,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// Indexを使ってSpriteを描画する
 			// Index数6、Instance数1
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 #ifdef USE_IMGUI
 
@@ -2034,7 +1866,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResource->Release();
 	vertexResourceSprite->Release();
 	indexResourceSprite->Release();
-	indexResource->Release();
 	transformationMatrixResourceSprite->Release();
 	materialResourceSprite->Release();
 	directionalLightResource->Release();
