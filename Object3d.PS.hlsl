@@ -48,28 +48,17 @@ PixelShaderOutput main(VertexShaderOutput input)
 	// Lightingを有効にしている場合
     if (gMaterial.enableLighting != 0)
     {
-		// 法線とライト方向の内積を計算
-		// マイナス方向を使い、0～1の範囲に制限する
-        float cos =
-			saturate(
-				dot(
-					normalize(input.normal),
-					-gDirectionalLight.direction));
+    // 法線とライト方向の内積
+        float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
 
-		// マテリアル、Texture、ライト色、明るさを合成
-        output.color =
-			gMaterial.color *
-			textureColor *
-			gDirectionalLight.color *
-			cos *
-			gDirectionalLight.intensity;
+    // Half Lambert
+        float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
+
+        output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
     }
     else
     {
-		// Lightingを行わない場合
-        output.color =
-			gMaterial.color *
-			textureColor;
+        output.color = gMaterial.color * textureColor;
     }
 
     return output;
