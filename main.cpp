@@ -593,7 +593,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// 分割数
 	const uint32_t kSubdivision = 16;
-	const uint32_t kVertexCount = kSubdivision * kSubdivision * 6;
+	// 球の頂点数
+	// 1つの四角形につき4頂点
+	const uint32_t kVertexCount = kSubdivision * kSubdivision * 4;
+	// 球のIndex数
+	// 1つの四角形につき三角形2枚、Indexは6個
+	const uint32_t kIndexCount = kSubdivision * kSubdivision * 6;
 
 	// ------------------------------
 	// ウィンドウ関連の初期化
@@ -1218,43 +1223,38 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 
 	// ------------------------------
-	// 頂点バッファの作成
-	// ------------------------------
-
-	// 頂点リソースを作成
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * kVertexCount);
-
-	// 頂点バッファビュー
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-
-	// ------------------------------
 	// Sprite用頂点リソースを作る
 	// ------------------------------
 
 	// Sprite用の頂点リソースを作成
-	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
-
+	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 4);
 	// Sprite用頂点バッファビュー
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
-
 	// GPUアドレス
 	vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
-
 	// バッファサイズ
-	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 6;
-
+	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 4;
 	// 1頂点サイズ
 	vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
 
-	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * kVertexCount;
-	vertexBufferView.StrideInBytes = sizeof(VertexData);
+	// ------------------------------
+	// Sprite用IndexResourceを作る
+	// ------------------------------
 
-	// 頂点リソースにデータを書き込む
-	VertexData* vertexData = nullptr;
+	// Sprite用IndexResourceを作成
+	ID3D12Resource* indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
 
-	// 書き込むためのアドレスを取得
-	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
+	// Sprite用IndexBufferViewを作成
+	D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
+
+	// IndexResourceのGPUアドレスを設定
+	indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
+
+	// IndexBuffer全体のサイズ
+	indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
+
+	// Index1個の形式はuint32_t
+	indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
 
 	// ------------------------------
 	// Sprite用頂点データ
@@ -1266,128 +1266,244 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
 
 	// 左下
-	vertexDataSprite[0].position = { 0.0f,360.0f,0.0f,1.0f };
-	vertexDataSprite[0].texcoord = { 0.0f,1.0f };
-	vertexDataSprite[0].normal = { 0.0f,0.0f,-1.0f };
+	vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f };
+	vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
+	vertexDataSprite[0].normal = { 0.0f, 0.0f, -1.0f };
 
 	// 左上
-	vertexDataSprite[1].position = { 0.0f,0.0f,0.0f,1.0f };
-	vertexDataSprite[1].texcoord = { 0.0f,0.0f };
-	vertexDataSprite[1].normal = { 0.0f,0.0f,-1.0f };
+	vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f };
+	vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
+	vertexDataSprite[1].normal = { 0.0f, 0.0f, -1.0f };
 
 	// 右下
-	vertexDataSprite[2].position = { 640.0f,360.0f,0.0f,1.0f };
-	vertexDataSprite[2].texcoord = { 1.0f,1.0f };
-	vertexDataSprite[2].normal = { 0.0f,0.0f,-1.0f };
+	vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f };
+	vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
+	vertexDataSprite[2].normal = { 0.0f, 0.0f, -1.0f };
 
-	// 左上2
-	vertexDataSprite[3].position = { 0.0f,0.0f,0.0f,1.0f };
-	vertexDataSprite[3].texcoord = { 0.0f,0.0f };
-	vertexDataSprite[3].normal = { 0.0f,0.0f,-1.0f };
-
-	// 右上2
-	vertexDataSprite[4].position = { 640.0f,0.0f,0.0f,1.0f };
-	vertexDataSprite[4].texcoord = { 1.0f,0.0f };
-	vertexDataSprite[4].normal = { 0.0f,0.0f,-1.0f };
-
-	// 右下2
-	vertexDataSprite[5].position = { 640.0f,360.0f,0.0f,1.0f };
-	vertexDataSprite[5].texcoord = { 1.0f,1.0f };
-	vertexDataSprite[5].normal = { 0.0f,0.0f,-1.0f };
+	// 右上
+	vertexDataSprite[3].position = { 640.0f, 0.0f, 0.0f, 1.0f };
+	vertexDataSprite[3].texcoord = { 1.0f, 0.0f };
+	vertexDataSprite[3].normal = { 0.0f, 0.0f, -1.0f };
 
 	// ------------------------------
-	// 球の頂点データを作る
+	// Sprite用Indexデータ
 	// ------------------------------
 
+	// IndexResourceの書き込み先
+	uint32_t* indexDataSprite = nullptr;
+
+	// CPUから書き込めるようにMapする
+	indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSprite));
+
+	// 1枚目の三角形
+	indexDataSprite[0] = 0;
+	indexDataSprite[1] = 1;
+	indexDataSprite[2] = 2;
+
+	// 2枚目の三角形
+	indexDataSprite[3] = 1;
+	indexDataSprite[4] = 3;
+	indexDataSprite[5] = 2;
+
+	// ------------------------------
+	// 球の頂点リソースを作成
+	// ------------------------------
+
+	// 頂点リソースを作成
+	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * kVertexCount);
+	// 頂点バッファビュー
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+	// GPUアドレス
+	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
+	// バッファサイズ
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * kVertexCount;
+	// 1頂点サイズ
+	vertexBufferView.StrideInBytes = sizeof(VertexData);
+
+	// ------------------------------
+	// 球用IndexResourceを作る
+	// ------------------------------
+
+	// 球用IndexResourceを作成
+	ID3D12Resource* indexResource = CreateBufferResource(device, sizeof(uint32_t) * kIndexCount);
+
+	// 球用IndexBufferViewを作成
+	D3D12_INDEX_BUFFER_VIEW indexBufferView{};
+
+	// IndexResourceのGPUアドレスを設定
+	indexBufferView.BufferLocation = indexResource->GetGPUVirtualAddress();
+
+	// IndexBuffer全体のサイズ
+	indexBufferView.SizeInBytes = sizeof(uint32_t) * kIndexCount;
+
+	// Index1個の形式はuint32_t
+	indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+
+	// ------------------------------
+	// 球の頂点データとIndexデータを作る
+	// ------------------------------
+
+	// 頂点リソースにデータを書き込む
+	VertexData* vertexData = nullptr;
+	// 書き込むためのアドレスを取得
+	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
+
+	// 球用IndexResourceの書き込み先
+	uint32_t* indexData = nullptr;
+	// CPUからIndexを書き込めるようにMapする
+	indexResource->Map(0, nullptr, reinterpret_cast<void**>(&indexData));
+
+	// 経度分割1つ分の角度
 	const float kLonEvery = 2.0f * std::numbers::pi_v<float> / float(kSubdivision);
+
+	// 緯度分割1つ分の角度
 	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
 
+	// 緯度方向
 	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex)
 	{
-		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;
+		// 現在の緯度
+		const float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * float(latIndex);
 
+		// 次の緯度
+		const float latNext = lat + kLatEvery;
+
+		// 経度方向
 		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex)
 		{
-			float lon = lonIndex * kLonEvery;
+			// 現在の経度
+			const float lon = kLonEvery * float(lonIndex);
 
-			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
+			// 次の経度
+			const float lonNext = lon + kLonEvery;
 
-			float lat2 = lat + kLatEvery;
-			float lon2 = lon + kLonEvery;
+			// 1つの四角形につき4頂点
+			const uint32_t vertexStart = (latIndex * kSubdivision + lonIndex) * 4;
 
-			Vector4 a = {
+			// 1つの四角形につき6Index
+			const uint32_t indexStart = (latIndex * kSubdivision + lonIndex) * 6;
+
+			// ------------------------------
+			// 頂点a：左下
+			// ------------------------------
+
+			vertexData[vertexStart + 0].position = {
 				cosf(lat) * cosf(lon),
 				sinf(lat),
 				cosf(lat) * sinf(lon),
 				1.0f
 			};
 
-			Vector4 b = {
-				cosf(lat2) * cosf(lon),
-				sinf(lat2),
-				cosf(lat2) * sinf(lon),
+			vertexData[vertexStart + 0].texcoord = {
+				float(lonIndex) /
+					float(kSubdivision),
+
+				1.0f -
+				float(latIndex) /
+					float(kSubdivision)
+			};
+
+			vertexData[vertexStart + 0].normal = {
+				vertexData[vertexStart + 0].position.x,
+				vertexData[vertexStart + 0].position.y,
+				vertexData[vertexStart + 0].position.z
+			};
+
+			// ------------------------------
+			// 頂点b：左上
+			// ------------------------------
+
+			vertexData[vertexStart + 1].position = {
+				cosf(latNext) * cosf(lon),
+				sinf(latNext),
+				cosf(latNext) * sinf(lon),
 				1.0f
 			};
 
-			Vector4 c = {
-				cosf(lat) * cosf(lon2),
+			vertexData[vertexStart + 1].texcoord = {
+				float(lonIndex) /
+					float(kSubdivision),
+
+				1.0f -
+				float(latIndex + 1) /
+					float(kSubdivision)
+			};
+
+			vertexData[vertexStart + 1].normal = {
+				vertexData[vertexStart + 1].position.x,
+				vertexData[vertexStart + 1].position.y,
+				vertexData[vertexStart + 1].position.z
+			};
+
+			// ------------------------------
+			// 頂点c：右下
+			// ------------------------------
+
+			vertexData[vertexStart + 2].position = {
+				cosf(lat) * cosf(lonNext),
 				sinf(lat),
-				cosf(lat) * sinf(lon2),
+				cosf(lat) * sinf(lonNext),
 				1.0f
 			};
 
-			Vector4 d = {
-				cosf(lat2) * cosf(lon2),
-				sinf(lat2),
-				cosf(lat2) * sinf(lon2),
+			vertexData[vertexStart + 2].texcoord = {
+				float(lonIndex + 1) /
+					float(kSubdivision),
+
+				1.0f -
+				float(latIndex) /
+					float(kSubdivision)
+			};
+
+			vertexData[vertexStart + 2].normal = {
+				vertexData[vertexStart + 2].position.x,
+				vertexData[vertexStart + 2].position.y,
+				vertexData[vertexStart + 2].position.z
+			};
+
+			// ------------------------------
+			// 頂点d：右上
+			// ------------------------------
+
+			vertexData[vertexStart + 3].position = {
+				cosf(latNext) * cosf(lonNext),
+				sinf(latNext),
+				cosf(latNext) * sinf(lonNext),
 				1.0f
 			};
 
-			vertexData[start + 0].position = a;
-			vertexData[start + 1].position = b;
-			vertexData[start + 2].position = c;
+			vertexData[vertexStart + 3].texcoord = {
+				float(lonIndex + 1) /
+					float(kSubdivision),
 
-			vertexData[start + 3].position = c;
-			vertexData[start + 4].position = b;
-			vertexData[start + 5].position = d;
+				1.0f -
+				float(latIndex + 1) /
+					float(kSubdivision)
+			};
 
-			vertexData[start].normal.x = vertexData[start].position.x;
-			vertexData[start].normal.y = vertexData[start].position.y;
-			vertexData[start].normal.z = vertexData[start].position.z;
+			vertexData[vertexStart + 3].normal = {
+				vertexData[vertexStart + 3].position.x,
+				vertexData[vertexStart + 3].position.y,
+				vertexData[vertexStart + 3].position.z
+			};
 
-			vertexData[start + 1].normal.x = vertexData[start + 1].position.x;
-			vertexData[start + 1].normal.y = vertexData[start + 1].position.y;
-			vertexData[start + 1].normal.z = vertexData[start + 1].position.z;
+			// ------------------------------
+			// 球のIndexデータ
+			// ------------------------------
 
-			vertexData[start + 2].normal.x = vertexData[start + 2].position.x;
-			vertexData[start + 2].normal.y = vertexData[start + 2].position.y;
-			vertexData[start + 2].normal.z = vertexData[start + 2].position.z;
+			// 1枚目の三角形
+			indexData[indexStart + 0] = vertexStart + 0;
 
-			vertexData[start + 3].normal.x = vertexData[start + 3].position.x;
-			vertexData[start + 3].normal.y = vertexData[start + 3].position.y;
-			vertexData[start + 3].normal.z = vertexData[start + 3].position.z;
+			indexData[indexStart + 1] = vertexStart + 1;
 
-			vertexData[start + 4].normal.x = vertexData[start + 4].position.x;
-			vertexData[start + 4].normal.y = vertexData[start + 4].position.y;
-			vertexData[start + 4].normal.z = vertexData[start + 4].position.z;
+			indexData[indexStart + 2] = vertexStart + 2;
 
-			vertexData[start + 5].normal.x = vertexData[start + 5].position.x;
-			vertexData[start + 5].normal.y = vertexData[start + 5].position.y;
-			vertexData[start + 5].normal.z = vertexData[start + 5].position.z;
+			// 2枚目の三角形
+			indexData[indexStart + 3] = vertexStart + 1;
 
-			float u = float(lonIndex) / float(kSubdivision);
-			float v = 1.0f - float(latIndex) / float(kSubdivision);
+			indexData[indexStart + 4] = vertexStart + 3;
 
-			float u2 = float(lonIndex + 1) / float(kSubdivision);
-			float v2 = 1.0f - float(latIndex + 1) / float(kSubdivision);
-
-			vertexData[start + 0].texcoord = { u, v };
-			vertexData[start + 1].texcoord = { u, v2 };
-			vertexData[start + 2].texcoord = { u2, v };
-
-			vertexData[start + 3].texcoord = { u2, v };
-			vertexData[start + 4].texcoord = { u, v2 };
-			vertexData[start + 5].texcoord = { u2, v2 };
+			indexData[indexStart + 5] = vertexStart + 2;
 		}
 	}
 
@@ -1743,27 +1859,33 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// PSOを設定
 			commandList->SetPipelineState(graphicsPipelineState);
 
-			// VertexBufferViewを設定
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-
-			// 形状を三角形リストに設定
+			// 描画する形状を三角形リストに設定
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			// マテリアルCBufferの場所を設定
+			// ----------------------
+			// 球の描画
+			// ----------------------
+
+			// 球用VBVを設定
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+
+			// 球用IBVを設定
+			commandList->IASetIndexBuffer(&indexBufferView);
+
+			// 球用Materialを設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
-			// WVP用CBufferの場所を設定
+			// 球用TransformationMatrixを設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
-			// 平行光源用CBufferの場所を設定
-			// RootParameter[3]へDirectionalLightを渡す
+			// 平行光源を設定
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
 
-			// どちらのTextureを使うかのフラグに応じてSRVを設定
+			// 球に使うTextureを設定
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
-			// 描画
-			commandList->DrawInstanced(kVertexCount, 1, 0, 0);
+			// Indexを使って球を描画
+			commandList->DrawIndexedInstanced(kIndexCount, 1, 0, 0, 0);
 
 			// フラグが変わってもspriteを変えない
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
@@ -1772,17 +1894,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// Sprite描画
 			// ---------------------
 
-			// Sprite用VBV
+			// Sprite用VBVを設定
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 
-			// Spriteはライティングしないので、MaterialのenableLightingをfalseにする
+			// Sprite用IBVを設定
+			commandList->IASetIndexBuffer(&indexBufferViewSprite);
+
+			// SpriteはLightingを行わないMaterialを使用する
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
-			// Sprite用WVP
+			// Sprite用TransformationMatrixを設定
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
-			// Sprite描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			// Spriteでは常にuvCheckerを使用する
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+
+			// Indexを使ってSpriteを描画する
+			// Index数6、Instance数1
+			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 #ifdef USE_IMGUI
 
@@ -1873,6 +2002,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexShaderBlob->Release();
 	materialResource->Release();
 	vertexResourceSprite->Release();
+	indexResourceSprite->Release();
+	indexResource->Release();
 	transformationMatrixResourceSprite->Release();
 	materialResourceSprite->Release();
 	directionalLightResource->Release();
