@@ -5,6 +5,7 @@ struct Material
 {
     float32_t4 color;
     int32_t enableLighting;
+    float32_t4x4 uvTransform;
 };
 
 ConstantBuffer<Material> gMaterial : register(b0);
@@ -22,8 +23,7 @@ struct DirectionalLight
     float intensity;
 };
 
-ConstantBuffer<DirectionalLight>
-	gDirectionalLight : register(b1);
+ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 
 // Texture
 Texture2D<float32_t4> gTexture : register(t0);
@@ -41,9 +41,20 @@ PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
 
-	// Textureから色を取得
+	// UV座標を変換する
+    float32_t4 transformedUV =
+		mul(
+			float32_t4(
+				input.texcoord,
+				0.0f,
+				1.0f),
+			gMaterial.uvTransform);
+
+	// 変換後のUVでTextureを読む
     float32_t4 textureColor =
-		gTexture.Sample(gSampler, input.texcoord);
+		gTexture.Sample(
+			gSampler,
+			transformedUV.xy);
 
 	// Lightingを有効にしている場合
     if (gMaterial.enableLighting != 0)

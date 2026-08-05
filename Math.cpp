@@ -1,7 +1,7 @@
 #include "Math.h"
 #include <cmath>
 
-// 単位行列を作る
+// 4x4単位行列を作る
 Matrix4x4 MakeIdentity4x4() {
 	Matrix4x4 result{};
 
@@ -9,6 +9,84 @@ Matrix4x4 MakeIdentity4x4() {
 	result.m[1][1] = 1.0f;
 	result.m[2][2] = 1.0f;
 	result.m[3][3] = 1.0f;
+
+	return result;
+}
+
+/// <summary>
+/// 拡縮行列を作る
+/// </summary>
+/// <param name="scale">XYZ方向の拡縮率</param>
+/// <returns>拡縮行列</returns>
+Matrix4x4 MakeScaleMatrix(const Vector3& scale)
+{
+	Matrix4x4 result{};
+
+	// X方向の拡縮
+	result.m[0][0] = scale.x;
+
+	// Y方向の拡縮
+	result.m[1][1] = scale.y;
+
+	// Z方向の拡縮
+	result.m[2][2] = scale.z;
+
+	// 同次座標用
+	result.m[3][3] = 1.0f;
+
+	return result;
+}
+
+/// <summary>
+/// Z軸回転行列を作る
+/// </summary>
+/// <param name="radian">回転角度。単位はラジアン</param>
+/// <returns>Z軸回転行列</returns>
+Matrix4x4 MakeRotateZMatrix(float radian)
+{
+	Matrix4x4 result{};
+
+	// cosとsinを計算
+	const float cosine = std::cos(radian);
+	const float sine = std::sin(radian);
+
+	// Z軸回転行列
+	result.m[0][0] = cosine;
+	result.m[0][1] = sine;
+	result.m[0][2] = 0.0f;
+	result.m[0][3] = 0.0f;
+
+	result.m[1][0] = -sine;
+	result.m[1][1] = cosine;
+	result.m[1][2] = 0.0f;
+	result.m[1][3] = 0.0f;
+
+	result.m[2][0] = 0.0f;
+	result.m[2][1] = 0.0f;
+	result.m[2][2] = 1.0f;
+	result.m[2][3] = 0.0f;
+
+	result.m[3][0] = 0.0f;
+	result.m[3][1] = 0.0f;
+	result.m[3][2] = 0.0f;
+	result.m[3][3] = 1.0f;
+
+	return result;
+}
+
+/// <summary>
+/// 平行移動行列を作る
+/// </summary>
+/// <param name="translate">XYZ方向の移動量</param>
+/// <returns>平行移動行列</returns>
+Matrix4x4 MakeTranslateMatrix(const Vector3& translate)
+{
+	Matrix4x4 result = MakeIdentity4x4();
+
+	// 行ベクトル形式なので、平行移動は4行目に入れる
+	result.m[3][0] = translate.x;
+	result.m[3][1] = translate.y;
+	result.m[3][2] = translate.z;
 
 	return result;
 }

@@ -1510,7 +1510,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ------------------------------
 
 	// Material用リソース
-	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Material));
+	ID3D12Resource* materialResource = CreateBufferResource(device, 256);
 
 	// Map
 	Material* materialData = nullptr;
@@ -1520,6 +1520,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 初期値
 	materialData->color = { 1.0f,1.0f,1.0f,1.0f };
 	materialData->enableLighting = true;
+
+	// 球のUVは最初は変形しない
+	materialData->uvTransform = MakeIdentity4x4();
 
 	// WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
@@ -1578,13 +1581,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, 256);
 
 	// Sprite用MaterialResource
-	ID3D12Resource* materialResourceSprite = CreateBufferResource(device, sizeof(Material));
+	ID3D12Resource* materialResourceSprite = CreateBufferResource(device, 256);
 
 	Material* materialDataSprite = nullptr;
 	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialDataSprite));
 
 	materialDataSprite->color = { 1.0f,1.0f,1.0f,1.0f };
 	materialDataSprite->enableLighting = false;
+
+	// SpriteのUVも最初は変形しない
+	materialDataSprite->uvTransform = MakeIdentity4x4();
 
 	// Sprite用TransformationMatrixのデータを書き込むためのポインタ
 	TransformationMatrix* transformationMatrixDataSprite = nullptr;
@@ -1598,6 +1604,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// Sprite用Transform
 	Transform transformSprite{
+		{1.0f,1.0f,1.0f},
+		{0.0f,0.0f,0.0f},
+		{0.0f,0.0f,0.0f}
+	};
+
+	// UVの拡縮・回転・平行移動を保持する
+	Transform uvTransformSprite{
 		{1.0f,1.0f,1.0f},
 		{0.0f,0.0f,0.0f},
 		{0.0f,0.0f,0.0f}
@@ -1783,15 +1796,35 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ImGuiのウィンドウを表示する
 		ImGui::Begin("Sprite");
 
-		// Spriteの座標を変更する
+		// Sprite本体の座標を変更する
 		ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f);
-	
+		// UVの平行移動
+		ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+		// UVの拡縮
+		ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+		// UVのZ軸回転
+		ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+
 		ImGui::End();
 
 		// ImGuiの描画を行う
 		ImGui::Render();
 
 #endif
+
+		// ------------------------------
+		// Sprite用UVTransform行列を作る
+		// ------------------------------
+
+		// 拡縮行列を作る
+		Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
+		// Z軸回転行列を掛ける
+		uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
+		// 平行移動行列を掛ける
+		uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
+		// Sprite用MaterialへUV変換行列を書き込む
+		materialDataSprite->uvTransform = uvTransformMatrix;
+
 
 		// Windowにメッセージが来ていたら最優先で処理させる
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {

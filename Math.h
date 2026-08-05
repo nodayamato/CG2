@@ -21,17 +21,26 @@ struct Vector4 {
 	float w;
 };
 
-// マテリアル情報
-struct Material {
-	Vector4 color;
-	int enableLighting;
-};
-
 // 頂点データ
 struct VertexData {
 	Vector4 position;
 	Vector2 texcoord;
 	Vector3 normal;
+};
+
+// 4x4行列
+struct Matrix4x4 {
+	float m[4][4];
+};
+
+// マテリアル情報
+struct Material {
+	Vector4 color;
+	int enableLighting;
+	// ConstantBufferのアライメントを合わせるための余白
+	float padding[3];
+	// UV座標変換行列
+	Matrix4x4 uvTransform;
 };
 
 // 平行光源
@@ -43,11 +52,6 @@ struct DirectionalLight
 	Vector3 direction;
 	// ライトの明るさ
 	float intensity;
-};
-
-// 4x4行列
-struct Matrix4x4 {
-	float m[4][4];
 };
 
 // ワールド行列、ビュー行列、射影行列をまとめた構造体
@@ -63,8 +67,17 @@ struct Transform {
 	Vector3 translate;
 };
 
-// 単位行列を作る
+// 4x4単位行列を作る
 Matrix4x4 MakeIdentity4x4();
+
+// 拡縮行列を作る
+Matrix4x4 MakeScaleMatrix(const Vector3& scale);
+
+// Z軸回転行列を作る
+Matrix4x4 MakeRotateZMatrix(float radian);
+
+// 平行移動行列を作る
+Matrix4x4 MakeTranslateMatrix(const Vector3& translate);
 
 // アフィン変換行列を作成する
 Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate);
