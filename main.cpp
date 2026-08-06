@@ -5,6 +5,7 @@
 #include "ConvertString.h"
 #include "Math.h"
 #include "ModelData.h"
+#include "Audio.h"
 #include <cstring>
 // 標準入出力を扱うライブラリ
 #include <cstdint>
@@ -27,6 +28,7 @@
 #include <dxcapi.h>
 #include <vector>
 #include <numbers>
+#include <xaudio2.h>
 #pragma warning(pop)
 
 #pragma comment(lib, "d3d12.lib")
@@ -34,6 +36,7 @@
 #pragma comment(lib, "Dbghelp.lib")
 #pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "dxcompiler.lib")
+#pragma comment(lib, "xaudio2.lib")
 
 #include "externals/DirectXTex/DirectXTex.h"
 #include "externals/DirectXTex/d3dx12.h"
@@ -593,6 +596,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// Dump出力を設定
 	SetUnhandledExceptionFilter(ExportDump);
 
+	// 音声管理
+	Audio audio;
+
 	// ------------------------------
 	// ウィンドウ関連の初期化
 	// ------------------------------
@@ -990,6 +996,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	);
 
 	assert(fenceEvent != nullptr);
+
+	// --------------------------------------
+	// XAudio2初期化
+	// --------------------------------------
+	
+	// XAudio2の初期化
+	audio.Initialize();
+
+	// WAVファイルを読み込む
+	audio.LoadWave("resources/Alarm01.wav");
+
+	// 音声を再生する
+	audio.PlayWave();
 
 	//------------------------------
 	// DXC関連の初期化
@@ -1901,6 +1920,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
 		debug->Release();
 	}
+
+	// Audioの終了
+	audio.Finalize();
 
 	// COMの終了
 	CoUninitialize();
