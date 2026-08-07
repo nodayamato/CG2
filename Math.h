@@ -73,6 +73,12 @@ Matrix4x4 MakeIdentity4x4();
 // 拡縮行列を作る
 Matrix4x4 MakeScaleMatrix(const Vector3& scale);
 
+// X軸回転行列を作る
+Matrix4x4 MakeRotateXMatrix(float radian);
+
+// Y軸回転行列を作る
+Matrix4x4 MakeRotateYMatrix(float radian);
+
 // Z軸回転行列を作る
 Matrix4x4 MakeRotateZMatrix(float radian);
 

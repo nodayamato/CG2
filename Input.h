@@ -7,22 +7,84 @@
 class Input
 {
 public:
-    void Initialize(HINSTANCE hInstance, HWND hwnd);
-    void Update();
+	/// <summary>
+	/// 初期化
+	/// </summary>
+	void Initialize(HINSTANCE hInstance, HWND hwnd);
 
-	// キーの押下状態を取得する
-    bool PushKey(uint8_t keyNumber);
-	// キーの離上状態を取得する
-    bool ReleaseKey(uint8_t keyNumber);
-	// キーの押下トリガー状態を取得する
-    bool TriggerKey(uint8_t keyNumber);
-	// キーの離上トリガー状態を取得する
-    bool ExitKey(uint8_t keyNumber);
+	/// <summary>
+	/// 毎フレーム更新
+	/// </summary>
+	void Update();
+
+	// ------------------------------
+	// キーボード
+	// ------------------------------
+
+	// キーを押している
+	bool PushKey(uint8_t keyNumber);
+
+	// キーを離している
+	bool ReleaseKey(uint8_t keyNumber);
+
+	// キーを押した瞬間
+	bool TriggerKey(uint8_t keyNumber);
+
+	// キーを離した瞬間
+	bool ExitKey(uint8_t keyNumber);
+
+	// ------------------------------
+	// マウス
+	// ------------------------------
+
+	/// <summary>
+	/// マウスボタンを押しているか
+	/// 0 = 左
+	/// 1 = 右
+	/// 2 = 中央
+	/// </summary>
+	bool PushMouse(uint8_t buttonNumber);
+
+	/// <summary>
+	/// マウスのX移動量
+	/// </summary>
+	LONG GetMouseMoveX() const
+	{
+		return mouseState_.lX;
+	}
+
+	/// <summary>
+	/// マウスのY移動量
+	/// </summary>
+	LONG GetMouseMoveY() const
+	{
+		return mouseState_.lY;
+	}
+
+	/// <summary>
+	/// ホイール移動量
+	/// </summary>
+	LONG GetWheel() const
+	{
+		return mouseState_.lZ;
+	}
 
 private:
-    Microsoft::WRL::ComPtr<IDirectInput8> directInput_;
-    Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard_;
+	// DirectInput
+	Microsoft::WRL::ComPtr<IDirectInput8> directInput_;
 
-    BYTE key_[256] = {};
-    BYTE preKey_[256] = {};
+	// キーボード
+	Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard_;
+
+	// マウス
+	Microsoft::WRL::ComPtr<IDirectInputDevice8> mouse_;
+
+	// 現在のキー
+	BYTE key_[256] = {};
+
+	// 前フレームのキー
+	BYTE preKey_[256] = {};
+
+	// マウス状態
+	DIMOUSESTATE2 mouseState_{};
 };

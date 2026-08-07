@@ -7,6 +7,7 @@
 #include "ModelData.h"
 #include "Audio.h"
 #include "Input.h"
+#include "DebugCamera.h"
 #include <cstring>
 // 標準入出力を扱うライブラリ
 #include <cstdint>
@@ -605,6 +606,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// 入力管理
 	Input input;
+
+	// デバッグカメラ
+	DebugCamera debugCamera;
+
+	// デバッグカメラ初期化
+	debugCamera.Initialize();
 
 	// ------------------------------
 	// ウィンドウ関連の初期化
@@ -1407,12 +1414,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		{0.0f, 0.0f, 0.0f},
 		{0.0f, 0.0f, 0.0f}
 	};
-	// CameraTransform変数を作る
-	Transform cameraTransform{
-		{1.0f, 1.0f, 1.0f},
-		{0.0f, 0.0f, 0.0f},
-		{0.0f, 0.0f, -10.0f}
-	};
 
 	// ------------------------------
 	// 平行光源用リソースを作る
@@ -1597,25 +1598,38 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 #endif
 
-		// キー入力の更新
+		// ------------------------------
+		// 入力更新
+		// ------------------------------
+
 		input.Update();
 
-		if (input.PushKey(DIK_0)) {
+		if (input.PushKey(DIK_0))
+		{
 			OutputDebugStringA("Hit 0\n");
 		}
 
+		// ------------------------------
+		// デバッグカメラ更新
+		// ------------------------------
+
+		debugCamera.Update(&input);
+
+		// ------------------------------
+		// 3Dモデル用行列更新
+		// ------------------------------
+
 		// ワールド行列を作る
 		Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-		// カメラの行列を作る
-		Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-		// ビュー行列を作る
-		Matrix4x4 viewMatrix = Inverse(cameraMatrix);
-		// 射影行列を作る
-		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+		// DebugCameraからビュー行列を取得
+		Matrix4x4 viewMatrix = debugCamera.GetViewMatrix();
+		// DebugCameraから射影行列を取得
+		Matrix4x4 projectionMatrix = debugCamera.GetProjectionMatrix();
 		// ワールド行列、ビュー行列、射影行列を合成してWVP行列を作る
 		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 		// GPUへ転送
 		wvpData->WVP = worldViewProjectionMatrix;
+		// Lightingで使用するWorld行列
 		wvpData->World = worldMatrix;
 
 		// ---------------------

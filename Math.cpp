@@ -38,6 +38,48 @@ Matrix4x4 MakeScaleMatrix(const Vector3& scale)
 }
 
 /// <summary>
+/// X軸回転行列を作る
+/// </summary>
+/// <param name="radian">回転角度。単位はラジアン</param>
+/// <returns>X軸回転行列</returns>
+Matrix4x4 MakeRotateXMatrix(float radian)
+{
+	Matrix4x4 result = MakeIdentity4x4();
+
+	const float cosine = cosf(radian);
+	const float sine = sinf(radian);
+
+	result.m[1][1] = cosine;
+	result.m[1][2] = sine;
+
+	result.m[2][1] = -sine;
+	result.m[2][2] = cosine;
+
+	return result;
+}
+
+/// <summary>
+/// Y軸回転行列を作る
+/// </summary>
+/// <param name="radian">回転角度。単位はラジアン</param>
+/// <returns>Y軸回転行列</returns>
+Matrix4x4 MakeRotateYMatrix(float radian)
+{
+	Matrix4x4 result = MakeIdentity4x4();
+
+	const float cosine = cosf(radian);
+	const float sine = sinf(radian);
+
+	result.m[0][0] = cosine;
+	result.m[0][2] = -sine;
+
+	result.m[2][0] = sine;
+	result.m[2][2] = cosine;
+
+	return result;
+}
+
+/// <summary>
 /// Z軸回転行列を作る
 /// </summary>
 /// <param name="radian">回転角度。単位はラジアン</param>
