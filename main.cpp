@@ -6,6 +6,7 @@
 #include "Math.h"
 #include "ModelData.h"
 #include "Audio.h"
+#include "Input.h"
 #include <cstring>
 // 標準入出力を扱うライブラリ
 #include <cstdint>
@@ -29,6 +30,8 @@
 #include <vector>
 #include <numbers>
 #include <xaudio2.h>
+#define DIRECTINPUT_VERSION 0x0800
+#include <dinput.h>
 #pragma warning(pop)
 
 #pragma comment(lib, "d3d12.lib")
@@ -37,6 +40,7 @@
 #pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "dxcompiler.lib")
 #pragma comment(lib, "xaudio2.lib")
+#pragma comment(lib, "dinput8.lib")
 
 #include "externals/DirectXTex/DirectXTex.h"
 #include "externals/DirectXTex/d3dx12.h"
@@ -599,6 +603,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 音声管理
 	Audio audio;
 
+	// 入力管理
+	Input input;
+
 	// ------------------------------
 	// ウィンドウ関連の初期化
 	// ------------------------------
@@ -763,6 +770,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// 初期化完了のログ
 	Log(logStream, "Complete create D3D12Device!!!\n");
+
+	// 入力の初期化
+	input.Initialize(GetModuleHandle(nullptr), hwnd);
 
 #ifdef _DEBUG
 	// デバッグレイヤーの情報を取得する
@@ -1586,6 +1596,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		ImGui::NewFrame();
 
 #endif
+
+		// キー入力の更新
+		input.Update();
+
+		if (input.PushKey(DIK_0)) {
+			OutputDebugStringA("Hit 0\n");
+		}
 
 		// ワールド行列を作る
 		Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
