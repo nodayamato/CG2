@@ -13,13 +13,13 @@ ConstantBuffer<Material> gMaterial : register(b0);
 // 平行光源
 struct DirectionalLight
 {
-	// ライトの色
+    // ライトの色
     float32_t4 color;
 
-	// ライトの向き
+    // ライトの向き
     float32_t3 direction;
 
-	// ライトの明るさ
+    // ライトの明るさ
     float intensity;
 };
 
@@ -41,35 +41,45 @@ PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
 
-	// UV座標を変換する
+    // UV座標を変換する
     float32_t4 transformedUV =
-		mul(
-			float32_t4(
-				input.texcoord,
-				0.0f,
-				1.0f),
-			gMaterial.uvTransform);
+        mul(
+            float32_t4(
+                input.texcoord,
+                0.0f,
+                1.0f),
+            gMaterial.uvTransform);
 
-	// 変換後のUVでTextureを読む
-    float32_t4 textureColor =
-		gTexture.Sample(
-			gSampler,
-			transformedUV.xy);
+    // 変換後のUVでTextureを読む
+    float32_t4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
 
-	// Lightingを有効にしている場合
+    // 完全に透明なPixelを破棄
+    if (textureColor.a == 0.0f)
+    {
+        discard;
+    }
+
+    // Lightingを有効にしている場合
     if (gMaterial.enableLighting != 0)
     {
-    // 法線とライト方向の内積
+        // 法線とライト方向の内積
         float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
 
-    // Half Lambert
+        // Half Lambert
         float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
 
-        output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
+        output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
+        output.color.a = gMaterial.color.a * textureColor.a;
     }
     else
     {
         output.color = gMaterial.color * textureColor;
+    }
+
+    // 最終的に完全透明なら破棄
+    if (output.color.a == 0.0f)
+    {
+        discard;
     }
 
     return output;

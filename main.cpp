@@ -8,6 +8,7 @@
 #include "Audio.h"
 #include "Input.h"
 #include "DebugCamera.h"
+#include "BlendMode.h"
 #include <cstring>
 // 標準入出力を扱うライブラリ
 #include <cstdint>
@@ -1017,7 +1018,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// --------------------------------------
 	// XAudio2初期化
 	// --------------------------------------
-	
+
 	// XAudio2の初期化
 	audio.Initialize();
 
@@ -1176,12 +1177,51 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	inputLayoutDesc.pInputElementDescs = inputElementDescs;
 	inputLayoutDesc.NumElements = _countof(inputElementDescs);
 
+	// -----------------
 	// BlendState
-	D3D12_BLEND_DESC blendDesc{};
+	// -----------------
 
-	// 全色書き込み
-	blendDesc.RenderTarget[0].RenderTargetWriteMask =
-		D3D12_COLOR_WRITE_ENABLE_ALL;
+	D3D12_BLEND_DESC blendDesc[kCountOfBlendMode]{};
+
+	for (uint32_t i = 0; i < kCountOfBlendMode; ++i) {
+		blendDesc[i].RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		blendDesc[i].RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+		blendDesc[i].RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		blendDesc[i].RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+	}
+
+	// ブレンドなし
+	blendDesc[kBlendModeNone].RenderTarget[0].BlendEnable = FALSE;
+
+	// 通常ブレンド
+	blendDesc[kBlendModeNormal].RenderTarget[0].BlendEnable = TRUE;
+	blendDesc[kBlendModeNormal].RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blendDesc[kBlendModeNormal].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	blendDesc[kBlendModeNormal].RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+
+	// 加算ブレンド
+	blendDesc[kBlendModeAdd].RenderTarget[0].BlendEnable = TRUE;
+	blendDesc[kBlendModeAdd].RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blendDesc[kBlendModeAdd].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	blendDesc[kBlendModeAdd].RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+
+	// 減算ブレンド
+	blendDesc[kBlendModeSub].RenderTarget[0].BlendEnable = TRUE;
+	blendDesc[kBlendModeSub].RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	blendDesc[kBlendModeSub].RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+	blendDesc[kBlendModeSub].RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+
+	// 乗算ブレンド
+	blendDesc[kBlendModeMul].RenderTarget[0].BlendEnable = TRUE;
+	blendDesc[kBlendModeMul].RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;
+	blendDesc[kBlendModeMul].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	blendDesc[kBlendModeMul].RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;
+
+	// スクリーンブレンド
+	blendDesc[kBlendModeScreen].RenderTarget[0].BlendEnable = TRUE;
+	blendDesc[kBlendModeScreen].RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+	blendDesc[kBlendModeScreen].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	blendDesc[kBlendModeScreen].RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
 
 	// RasterizerState
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
@@ -1221,7 +1261,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		pixelShaderBlob->GetBufferSize()
 	};
 
-	graphicsPipelineStateDesc.BlendState = blendDesc;
 	graphicsPipelineStateDesc.RasterizerState = rasterizerDesc;
 
 	// DepthStencilStateを設定
@@ -1235,19 +1274,34 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	graphicsPipelineStateDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 
 	// 利用するトポロジ
-	graphicsPipelineStateDesc.PrimitiveTopologyType =
-		D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	graphicsPipelineStateDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 
 	// サンプル数
 	graphicsPipelineStateDesc.SampleDesc.Count = 1;
 	graphicsPipelineStateDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
 
-	// 実際に生成
-	ID3D12PipelineState* graphicsPipelineState = nullptr;
+	// -----------------
+	// ブレンドモードごとのPSOを生成
+	// -----------------
 
-	hr = device->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&graphicsPipelineState));
+	ID3D12PipelineState* graphicsPipelineStates[kCountOfBlendMode] = {};
 
-	assert(SUCCEEDED(hr));
+	for (uint32_t i = 0; i < kCountOfBlendMode; ++i) {
+
+		// ブレンド設定
+		graphicsPipelineStateDesc.BlendState = blendDesc[i];
+
+		// PSO生成
+		hr = device->CreateGraphicsPipelineState(
+			&graphicsPipelineStateDesc,
+			IID_PPV_ARGS(&graphicsPipelineStates[i])
+		);
+
+		assert(SUCCEEDED(hr));
+	}
+
+	// 現在のブレンドモード
+	BlendMode blendMode = kBlendModeNormal;
 
 	// ------------------------------
 	// Sprite用頂点リソースを作る
@@ -1333,11 +1387,113 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	indexDataSprite[5] = 2;
 
 	// ------------------------------
+	// Particle用のModelData
+	// ------------------------------
+
+	ModelData particleModelData;
+
+	// 左上
+	particleModelData.vertices.push_back({
+		.position = {-1.0f, 1.0f, 0.0f, 1.0f},
+		.texcoord = {0.0f, 0.0f},
+		.normal = {0.0f, 0.0f, -1.0f}
+		});
+
+	// 右上
+	particleModelData.vertices.push_back({
+		.position = {1.0f, 1.0f, 0.0f, 1.0f},
+		.texcoord = {1.0f, 0.0f},
+		.normal = {0.0f, 0.0f, -1.0f}
+		});
+
+	// 左下
+	particleModelData.vertices.push_back({
+		.position = {-1.0f, -1.0f, 0.0f, 1.0f},
+		.texcoord = {0.0f, 1.0f},
+		.normal = {0.0f, 0.0f, -1.0f}
+		});
+
+	// 左下
+	particleModelData.vertices.push_back({
+		.position = {-1.0f, -1.0f, 0.0f, 1.0f},
+		.texcoord = {0.0f, 1.0f},
+		.normal = {0.0f, 0.0f, -1.0f}
+		});
+
+	// 右上
+	particleModelData.vertices.push_back({
+		.position = {1.0f, 1.0f, 0.0f, 1.0f},
+		.texcoord = {1.0f, 0.0f},
+		.normal = {0.0f, 0.0f, -1.0f}
+		});
+
+	// 右下
+	particleModelData.vertices.push_back({
+		.position = {1.0f, -1.0f, 0.0f, 1.0f},
+		.texcoord = {1.0f, 1.0f},
+		.normal = {0.0f, 0.0f, -1.0f}
+		});
+
+	// -----------------
+	// Particle用VertexResource
+	// -----------------
+
+	ID3D12Resource* particleVertexResource =
+		CreateBufferResource(
+			device,
+			sizeof(VertexData) * particleModelData.vertices.size()
+		);
+
+	// -----------------
+	// Particle用VertexBufferView
+	// -----------------
+
+	D3D12_VERTEX_BUFFER_VIEW particleVertexBufferView{};
+
+	particleVertexBufferView.BufferLocation =
+		particleVertexResource->GetGPUVirtualAddress();
+
+	particleVertexBufferView.SizeInBytes =
+		static_cast<UINT>(
+			sizeof(VertexData) * particleModelData.vertices.size()
+			);
+
+	particleVertexBufferView.StrideInBytes =
+		sizeof(VertexData);
+
+	// -----------------
+	// Particle頂点データ
+	// -----------------
+
+	VertexData* particleVertexData = nullptr;
+
+	HRESULT particleVertexMapResult =
+		particleVertexResource->Map(
+			0,
+			nullptr,
+			reinterpret_cast<void**>(&particleVertexData)
+		);
+
+	assert(SUCCEEDED(particleVertexMapResult));
+
+	std::memcpy(
+		particleVertexData,
+		particleModelData.vertices.data(),
+		sizeof(VertexData) * particleModelData.vertices.size()
+	);
+
+	// -----------------
+	// Instancing
+	// -----------------
+
+	const uint32_t instanceCount = 10;
+
+	// ------------------------------
 	// OBJモデルを読み込む
 	// ------------------------------
 
 	// resourcesフォルダにあるplane.objを読み込む
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "fence.obj");
 
 	// OBJファイルに頂点が入っていることを確認する
 	assert(!modelData.vertices.empty());
@@ -1411,7 +1567,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// Transform変数を作る
 	Transform transform{
 		{1.0f, 1.0f, 1.0f},
-		{0.0f, 0.0f, 0.0f},
+		{0.0f, std::numbers::pi_v<float>, 0.0f},
 		{0.0f, 0.0f, 0.0f}
 	};
 
@@ -1632,6 +1788,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// Lightingで使用するWorld行列
 		wvpData->World = worldMatrix;
 
+		// -----------------
+		// Particle表示確認
+		// -----------------
+
+		Matrix4x4 particleWorldMatrix =
+			MakeAffineMatrix(
+				{ 3.0f, 3.0f, 3.0f },
+				{ 0.0f, 0.0f, 0.0f },
+				{ 0.0f, 0.0f, 0.0f }
+			);
+
+		wvpData->WVP =
+			Multiply(
+				particleWorldMatrix,
+				Multiply(viewMatrix, projectionMatrix)
+			);
+
+		wvpData->World = particleWorldMatrix;
+
 		// ---------------------
 		// Sprite用WVP
 		// ---------------------
@@ -1667,6 +1842,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// 色を編集する
 		ImGui::ColorEdit4("Color", &materialData->color.x);
+		const char* blendModeNames[] = {
+			"kBlendModeNone",
+			"kBlendModeNormal",
+			"kBlendModeAdd",
+			"kBlendModeSub",
+			"kBlendModeMul",
+			"kBlendModeScreen"
+		};
+
+		int blendModeIndex = static_cast<int>(blendMode);
+
+		if (ImGui::Combo("Blend", &blendModeIndex, blendModeNames, kCountOfBlendMode)) {
+
+			blendMode = static_cast<BlendMode>(blendModeIndex);
+		}
+
 		// どちらのTextureを使うかのフラグ
 		ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
@@ -1772,7 +1963,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			// PSOを設定
-			commandList->SetPipelineState(graphicsPipelineState);
+			commandList->SetPipelineState(graphicsPipelineStates[blendMode]);
 
 			// 描画する形状を三角形リストに設定
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1798,10 +1989,53 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// OBJモデルを描画する
 			// LoadObjFileで面を頂点列へ展開済みなのでDrawInstancedを使う
-			commandList->DrawInstanced(static_cast<UINT>(modelData.vertices.size()), 1, 0, 0);
+			//commandList->DrawInstanced(static_cast<UINT>(modelData.vertices.size()), 1, 0, 0);
 
 			// フラグが変わってもspriteを変えない
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+
+			// -----------------
+			// Particle描画
+			// -----------------
+
+			// Particle用頂点バッファ
+			commandList->IASetVertexBuffers(
+				0,
+				1,
+				&particleVertexBufferView
+			);
+
+			// Material
+			commandList->SetGraphicsRootConstantBufferView(
+				0,
+				materialResource->GetGPUVirtualAddress()
+			);
+
+			// TransformationMatrix
+			commandList->SetGraphicsRootConstantBufferView(
+				1,
+				wvpResource->GetGPUVirtualAddress()
+			);
+
+			// Texture
+			commandList->SetGraphicsRootDescriptorTable(
+				2,
+				textureSrvHandleGPU
+			);
+
+			// 平行光源
+			commandList->SetGraphicsRootConstantBufferView(
+				3,
+				directionalLightResource->GetGPUVirtualAddress()
+			);
+
+			// Instancingで描画
+			commandList->DrawInstanced(
+				static_cast<UINT>(particleModelData.vertices.size()),
+				instanceCount,
+				0,
+				0
+			);
 
 			// ---------------------
 			// Sprite描画
@@ -1901,10 +2135,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	intermediateResource2->Release();
 	wvpResource->Release();
 	vertexResource->Release();
+	particleVertexResource->Release();
 	textureResource->Release();
 	textureResource2->Release();
 	depthStencilResource->Release();
-	graphicsPipelineState->Release();
+	for (uint32_t i = 0; i < kCountOfBlendMode; ++i) {
+		graphicsPipelineStates[i]->Release();
+	}
 	signatureBlob->Release();
 	if (errorBlob)
 	{
