@@ -67,6 +67,22 @@ struct Transform {
 	Vector3 translate;
 };
 
+// パーティクルの情報
+struct Particle {
+	Transform transform;
+	Vector3 velocity;
+	Vector4 color;
+	float lifeTime;
+	float currentTime;
+};
+
+// GPU用パーティクルデータ
+struct ParticleForGPU {
+	Matrix4x4 WVP;
+	Matrix4x4 World;
+	Vector4 color;
+};
+
 // 4x4単位行列を作る
 Matrix4x4 MakeIdentity4x4();
 

@@ -38,8 +38,8 @@ PixelShaderOutput main(VertexShaderOutput input)
     // 変換後のUVでTextureを読む
     float32_t4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
 
-    // マテリアルの色とTextureの色を掛け合わせる
-    output.color = gMaterial.color * textureColor;
+    // パーティクルの色を反映
+    output.color = gMaterial.color * textureColor * input.color;
 
     // 最終的に完全透明なら破棄
     if (output.color.a == 0.0f)
