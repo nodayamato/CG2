@@ -81,6 +81,10 @@ struct ParticleForGPU {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
 	Vector4 color;
+	// Dissolveの進み具合
+	float dissolveThreshold;
+	// アラインメント調整
+	float padding[3];
 };
 
 // 4x4単位行列を作る

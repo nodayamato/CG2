@@ -12,6 +12,8 @@ struct ParticleForGPU
     float32_t4x4 WVP;
     float32_t4x4 World;
     float32_t4 color;
+    float32_t dissolveThreshold;
+    float32_t3 padding;
 };
 
 StructuredBuffer<ParticleForGPU> gParticle : register(t0);
@@ -30,5 +32,6 @@ VertexShaderOutput main(VertexShaderInput input, uint32_t instanceId : SV_Instan
     output.texcoord = input.texcoord;
     output.normal = normalize(mul(input.normal, (float32_t3x3) gParticle[instanceId].World));
     output.color = gParticle[instanceId].color;
+    output.dissolveThreshold = gParticle[instanceId].dissolveThreshold;
     return output;
 }

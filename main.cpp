@@ -9,6 +9,7 @@
 #include "Input.h"
 #include "DebugCamera.h"
 #include "BlendMode.h"
+#include "ParticleSystem.h"
 #include <cstring>
 // 乱数生成器を扱うライブラリ
 #include <random>
@@ -595,57 +596,6 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(
 	return handle;
 }
 
-// -----------------
-// パーティクル生成関数
-// -----------------
-Particle MakeNewParticle(std::mt19937& randomEngine) {
-
-	// 乱数の範囲
-	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
-
-	Particle particle{};
-
-	// 拡大縮小
-	particle.transform.scale = { 1.0f, 1.0f, 1.0f };
-
-	// 回転
-	particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
-
-	// 初期位置
-	particle.transform.translate = {
-		distribution(randomEngine),
-		distribution(randomEngine),
-		distribution(randomEngine)
-	};
-
-	// 速度
-	particle.velocity = {
-		distribution(randomEngine),
-		distribution(randomEngine),
-		distribution(randomEngine)
-	};
-
-	std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
-
-	// 色
-	particle.color = {
-		distColor(randomEngine),
-		distColor(randomEngine),
-		distColor(randomEngine),
-		1.0f
-	};
-
-	// 寿命を1～3秒でランダムに設定
-	std::uniform_real_distribution<float> distTime(1.0f, 3.0f);
-
-	particle.lifeTime = distTime(randomEngine);
-
-	// 経過時間を0にする
-	particle.currentTime = 0.0f;
-
-	return particle;
-}
-
 // Windowsアプリのエントリーポイント(main関数)
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
@@ -834,10 +784,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// 入力の初期化
 	input.Initialize(GetModuleHandle(nullptr), hwnd);
-
-	// 乱数生成器の初期化
-	std::random_device seedGenerator;
-	std::mt19937 randomEngine(seedGenerator());
 
 #ifdef _DEBUG
 	// デバッグレイヤーの情報を取得する
@@ -1725,13 +1671,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// Instancing
 	// -----------------
 
-	const uint32_t kNumMaxInstance = 10;
-
 	// Instancing用Resource
 	ID3D12Resource* instancingResource =
 		CreateBufferResource(
 			device,
-			sizeof(ParticleForGPU) * kNumMaxInstance
+			sizeof(ParticleForGPU) * ParticleSystem::kNumMaxInstance
 		);
 
 	// 書き込み先
@@ -1745,7 +1689,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// 初期化
 	for (uint32_t index = 0;
-		index < kNumMaxInstance;
+		index < ParticleSystem::kNumMaxInstance;
 		++index) {
 
 		instancingData[index].WVP =
@@ -1757,16 +1701,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		instancingData[index].color = {
 			1.0f, 1.0f, 1.0f, 1.0f
 		};
+
+		instancingData[index].dissolveThreshold = 0.0f;
 	}
 
 	// -----------------
-	// パーティクル初期化
+	// ParticleSystem
 	// -----------------
-	Particle particles[kNumMaxInstance];
+	ParticleSystem particleSystem;
 
-	for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
-		particles[index] = MakeNewParticle(randomEngine);
-	}
+	particleSystem.Initialize();
+
+	// Particle用UVTransform
+	Transform particleUVTransform{
+		{1.0f, 1.0f, 1.0f},
+		{0.0f, 0.0f, 0.0f},
+		{0.0f, 0.0f, 0.0f}
+	};
 
 	// 1フレームの時間
 	const float kDeltaTime = 1.0f / 60.0f;
@@ -1853,6 +1804,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		{0.0f, std::numbers::pi_v<float>, 0.0f},
 		{0.0f, 0.0f, 0.0f}
 	};
+
+	// -----------------
+	// Particle用Material
+	// -----------------
+
+	ID3D12Resource* particleMaterialResource =
+		CreateBufferResource(device, 256);
+
+	Material* particleMaterialData = nullptr;
+
+	particleMaterialResource->Map(
+		0,
+		nullptr,
+		reinterpret_cast<void**>(&particleMaterialData)
+	);
+
+	// 初期値
+	particleMaterialData->color = {
+		1.0f, 1.0f, 1.0f, 1.0f
+	};
+
+	particleMaterialData->enableLighting = false;
+
+	particleMaterialData->uvTransform =
+		MakeIdentity4x4();
 
 	// ------------------------------
 	// 平行光源用リソースを作る
@@ -2016,7 +1992,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_BUFFER_SRV_FLAG_NONE;
 
 	instancingSrvDesc.Buffer.NumElements =
-		kNumMaxInstance;
+		ParticleSystem::kNumMaxInstance;
 
 	instancingSrvDesc.Buffer.StructureByteStride =
 		sizeof(ParticleForGPU);
@@ -2129,47 +2105,57 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				projectionMatrix
 			);
 		
-		// 描画するインスタンス数
-		uint32_t numInstance = 0;
+		// Particle更新
+		particleSystem.Update(
+			viewProjectionMatrix,
+			instancingData,
+			kDeltaTime
+		);
 
-		// パーティクル更新
-		for (uint32_t index = 0; index < kNumMaxInstance; ++index) {
+		// 描画するParticle数
+		uint32_t numInstance = particleSystem.GetNumInstance();
 
-			// 寿命が過ぎたパーティクルは処理しない
-			if (particles[index].lifeTime < particles[index].currentTime) {
-				continue;
-			}
+		// -----------------
+		// Particle UVAnimation
+		// -----------------
 
-			// 経過時間を更新
-			particles[index].currentTime += kDeltaTime;
+		// 横方向にUVを流す
+		particleUVTransform.translate.x +=
+			0.2f * kDeltaTime;
 
-			// 速度を位置に反映
-			particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
-			particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
-			particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
-
-			// World行列
-			Matrix4x4 worldMatrixParticle =
-				MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
-
-			// WVP行列
-			Matrix4x4 worldViewProjectionMatrixParticle = 
-				Multiply(worldMatrixParticle, viewProjectionMatrix);
-
-			// GPUに書き込み
-			instancingData[numInstance].WVP = worldViewProjectionMatrixParticle;
-			instancingData[numInstance].World = worldMatrixParticle;
-			instancingData[numInstance].color = particles[index].color;
-
-			// 寿命に応じて徐々に透明にする
-			float alpha = 1.0f - (particles[index].currentTime / particles[index].lifeTime);
-
-			// Alphaだけ寿命に応じて変更
-			instancingData[numInstance].color.w = alpha;
-
-			// 描画するインスタンス数を増やす
-			++numInstance;
+		// 1.0を超えたら戻す
+		if (particleUVTransform.translate.x >= 1.0f) {
+			particleUVTransform.translate.x -= 1.0f;
 		}
+
+		// -----------------
+		// Particle用UV行列
+		// -----------------
+
+		Matrix4x4 particleUVMatrix =
+			MakeScaleMatrix(
+				particleUVTransform.scale
+			);
+
+		particleUVMatrix =
+			Multiply(
+				particleUVMatrix,
+				MakeRotateZMatrix(
+					particleUVTransform.rotate.z
+				)
+			);
+
+		particleUVMatrix =
+			Multiply(
+				particleUVMatrix,
+				MakeTranslateMatrix(
+					particleUVTransform.translate
+				)
+			);
+
+		// GPUへ送る
+		particleMaterialData->uvTransform =
+			particleUVMatrix;
 
 		// -----------------
 		// Particle表示確認
@@ -2359,7 +2345,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
 			// OBJモデル用Materialを設定
-			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(0, particleMaterialResource->GetGPUVirtualAddress());
 
 			// OBJモデル用TransformationMatrixを設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
@@ -2552,6 +2538,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	particleVertexShaderBlob->Release();
 	particlePixelShaderBlob->Release();
 	particleSignatureBlob->Release();
+	particleMaterialResource->Release();
 	if (particleErrorBlob) {
 		particleErrorBlob->Release();
 	}

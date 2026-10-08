@@ -38,6 +38,25 @@ PixelShaderOutput main(VertexShaderOutput input)
     // 変換後のUVでTextureを読む
     float32_t4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
 
+    // Dissolve用の簡易ノイズ
+    float32_t2 noiseUV = input.texcoord * 20.0f;
+
+    float32_t noise =
+    frac(
+        sin(
+            dot(
+                floor(noiseUV),
+                float32_t2(12.9898f, 78.233f)
+            )
+        ) * 43758.5453f
+    );
+
+    // Dissolve値より小さい部分を消す
+    if (noise < input.dissolveThreshold)
+    {
+        discard;
+    }
+    
     // パーティクルの色を反映
     output.color = gMaterial.color * textureColor * input.color;
 
