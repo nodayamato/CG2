@@ -109,8 +109,10 @@ Particle ParticleSystem::MakeNewParticle() {
 // -----------------
 void ParticleSystem::Update(
 	const Matrix4x4& viewProjectionMatrix,
+	const Matrix4x4& billboardMatrix,
 	ParticleForGPU* instancingData,
-	float deltaTime) {
+	float deltaTime,
+	bool useBillboard) {
 
 	// -----------------
 	// 描画数をリセット
@@ -184,12 +186,46 @@ void ParticleSystem::Update(
 		// -----------------
 		// World
 		// -----------------
-		Matrix4x4 worldMatrix =
-			MakeAffineMatrix(
-				particles_[index].transform.scale,
-				particles_[index].transform.rotate,
-				particles_[index].transform.translate
-			);
+
+		Matrix4x4 worldMatrix{};
+
+		if (useBillboard) {
+
+			// -----------------
+			// Billboardあり
+			// -----------------
+
+			Matrix4x4 scaleMatrix =
+				MakeScaleMatrix(
+					particles_[index].transform.scale
+				);
+
+			Matrix4x4 translateMatrix =
+				MakeTranslateMatrix(
+					particles_[index].transform.translate
+				);
+
+			worldMatrix =
+				Multiply(
+					Multiply(
+						scaleMatrix,
+						billboardMatrix
+					),
+					translateMatrix
+				);
+		}
+		else {
+
+			// -----------------
+			// Billboardなし
+			// -----------------
+			worldMatrix =
+				MakeAffineMatrix(
+					particles_[index].transform.scale,
+					particles_[index].transform.rotate,
+					particles_[index].transform.translate
+				);
+		}
 
 		// -----------------
 		// WVP
