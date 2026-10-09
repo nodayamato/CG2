@@ -22,8 +22,10 @@ public:
 	// -----------------
 	void Update(
 		const Matrix4x4& viewProjectionMatrix,
+		const Matrix4x4& billboardMatrix,
 		ParticleForGPU* instancingData,
-		float deltaTime
+		float deltaTime,
+		bool useBillboard
 	);
 
 	// -----------------
