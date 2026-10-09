@@ -1457,6 +1457,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		particlePipelineStateDesc =
 		graphicsPipelineStateDesc;
 
+	// Particleは両面描画
+	particlePipelineStateDesc.RasterizerState.CullMode =
+		D3D12_CULL_MODE_NONE;
+
 	particlePipelineStateDesc.DepthStencilState.DepthWriteMask =
 		D3D12_DEPTH_WRITE_MASK_ZERO;
 
@@ -1711,6 +1715,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ParticleSystem particleSystem;
 
 	particleSystem.Initialize();
+
+	// Billboardを使うか
+	bool useBillboard = true;
 
 	// Particle用UVTransform
 	Transform particleUVTransform{
@@ -2088,6 +2095,45 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Matrix4x4 viewMatrix = debugCamera.GetViewMatrix();
 		// DebugCameraから射影行列を取得
 		Matrix4x4 projectionMatrix = debugCamera.GetProjectionMatrix();
+
+		// -----------------
+		// BillboardMatrix
+		// -----------------
+
+		// 板ポリの裏表を反転
+		Matrix4x4 backToFrontMatrix =
+			MakeRotateYMatrix(
+				std::numbers::pi_v<float>
+			);
+
+		// View行列からCameraの回転行列を作る
+		Matrix4x4 cameraMatrix = MakeIdentity4x4();
+
+		// Viewの回転部分を転置する
+		cameraMatrix.m[0][0] = viewMatrix.m[0][0];
+		cameraMatrix.m[0][1] = viewMatrix.m[1][0];
+		cameraMatrix.m[0][2] = viewMatrix.m[2][0];
+
+		cameraMatrix.m[1][0] = viewMatrix.m[0][1];
+		cameraMatrix.m[1][1] = viewMatrix.m[1][1];
+		cameraMatrix.m[1][2] = viewMatrix.m[2][1];
+
+		cameraMatrix.m[2][0] = viewMatrix.m[0][2];
+		cameraMatrix.m[2][1] = viewMatrix.m[1][2];
+		cameraMatrix.m[2][2] = viewMatrix.m[2][2];
+
+		// Billboard
+		Matrix4x4 billboardMatrix =
+			Multiply(
+				backToFrontMatrix,
+				cameraMatrix
+			);
+
+		// 平行移動は使わない
+		billboardMatrix.m[3][0] = 0.0f;
+		billboardMatrix.m[3][1] = 0.0f;
+		billboardMatrix.m[3][2] = 0.0f;
+
 		// ワールド行列、ビュー行列、射影行列を合成してWVP行列を作る
 		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 		// GPUへ転送
@@ -2108,8 +2154,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// Particle更新
 		particleSystem.Update(
 			viewProjectionMatrix,
+			billboardMatrix,
 			instancingData,
-			kDeltaTime
+			kDeltaTime,
+			useBillboard
 		);
 
 		// 描画するParticle数
@@ -2208,6 +2256,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// モデルの回転角度を編集する
 		ImGui::DragFloat3("ModelRotate", &transform.rotate.x, 0.01f);
+
+		// Billboard
+		ImGui::Checkbox("useBillboard", &useBillboard);
 
 		// 色を編集する
 		ImGui::ColorEdit4("Color", &materialData->color.x);
