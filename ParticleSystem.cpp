@@ -1,6 +1,43 @@
 #include "ParticleSystem.h"
 
 // -----------------
+// AABBとPointの衝突判定
+// -----------------
+bool IsCollision(
+	const AABB& aabb,
+	const Vector3& point) {
+
+	if (point.x < aabb.min.x ||
+		point.x > aabb.max.x) {
+
+		return false;
+	}
+
+	if (point.y < aabb.min.y ||
+		point.y > aabb.max.y) {
+
+		return false;
+	}
+
+	if (point.z < aabb.min.z ||
+		point.z > aabb.max.z) {
+
+		return false;
+	}
+
+	return true;
+}
+
+// -----------------
+// AccelerationField設定
+// -----------------
+void ParticleSystem::SetAccelerationField(
+	const AccelerationField& field) {
+
+	accelerationField_ = field;
+}
+
+// -----------------
 // 初期化
 // -----------------
 void ParticleSystem::Initialize() {
@@ -142,7 +179,8 @@ void ParticleSystem::Update(
 	const Matrix4x4& billboardMatrix,
 	ParticleForGPU* instancingData,
 	float deltaTime,
-	bool useBillboard) {
+	bool useBillboard,
+	bool useAccelerationField) {
 
 	// -----------------
 	// 描画数リセット
@@ -171,8 +209,28 @@ void ParticleSystem::Update(
 		// -----------------
 		// 経過時間
 		// -----------------
-		particleIterator->currentTime +=
-			deltaTime;
+		particleIterator->currentTime += deltaTime;
+
+		// -----------------
+		// Field
+		// -----------------
+		if (useAccelerationField && IsCollision(
+			accelerationField_.area,
+			particleIterator->
+			transform.translate)) {
+
+			particleIterator->velocity.x +=
+				accelerationField_.acceleration.x *
+				deltaTime;
+
+			particleIterator->velocity.y +=
+				accelerationField_.acceleration.y *
+				deltaTime;
+
+			particleIterator->velocity.z +=
+				accelerationField_.acceleration.z *
+				deltaTime;
+		}
 
 		// -----------------
 		// 位置更新
