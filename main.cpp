@@ -1716,6 +1716,27 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	particleSystem.Initialize();
 
+	// -----------------
+	// Emitter
+	// -----------------
+	Emitter emitter{};
+
+	emitter.transform.scale = {
+		1.0f, 1.0f, 1.0f
+	};
+
+	emitter.transform.rotate = {
+		0.0f, 0.0f, 0.0f
+	};
+
+	emitter.transform.translate = {
+		0.0f, 0.0f, 0.0f
+	};
+
+	emitter.count = 3;
+	emitter.frequency = 0.5f;
+	emitter.frequencyTime = 0.0f;
+
 	// Billboardを使うか
 	bool useBillboard = true;
 
@@ -2151,6 +2172,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				projectionMatrix
 			);
 		
+		// -----------------
+		// Emitter更新
+		// -----------------
+
+		emitter.frequencyTime += kDeltaTime;
+
+		if (emitter.frequency <=
+			emitter.frequencyTime) {
+
+			particleSystem.Emit(
+				emitter
+			);
+
+			emitter.frequencyTime -= emitter.frequency;
+		}
+
 		// Particle更新
 		particleSystem.Update(
 			viewProjectionMatrix,
@@ -2259,6 +2296,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// Billboard
 		ImGui::Checkbox("useBillboard", &useBillboard);
+
+		// Emitter位置
+		ImGui::DragFloat3(
+			"EmitterTranslate",
+			&emitter.transform.translate.x,
+			0.01f,
+			-100.0f,
+			100.0f
+		);
+
+		// Particle追加
+		if (ImGui::Button("Add Particle")) {
+
+			particleSystem.Emit(emitter);
+		}
 
 		// 色を編集する
 		ImGui::ColorEdit4("Color", &materialData->color.x);

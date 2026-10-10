@@ -1,8 +1,18 @@
 #pragma once
 #include "Math.h"
-#include <array>
+#include <list>
 #include <cstdint>
 #include <random>
+
+// -----------------
+// Emitter
+// -----------------
+struct Emitter {
+	Transform transform; // エミッタのTransform
+	uint32_t count; // 1回の発生数
+	float frequency; // 発生頻度
+	float frequencyTime; // 経過時間
+};
 
 class ParticleSystem {
 public:
@@ -10,12 +20,22 @@ public:
 	// -----------------
 	// 最大Particle数
 	// -----------------
-	static constexpr uint32_t kNumMaxInstance = 10;
+	static constexpr uint32_t kNumMaxInstance = 100;
 
 	// -----------------
 	// 初期化
 	// -----------------
 	void Initialize();
+
+	// -----------------
+	// Particle追加
+	// -----------------
+	void AddParticles(uint32_t count);
+
+	// -----------------
+	// EmitterからParticle生成
+	// -----------------
+	void Emit(const Emitter& emitter);
 
 	// -----------------
 	// 更新
@@ -40,14 +60,14 @@ private:
 	// -----------------
 	// Particle生成
 	// -----------------
-	Particle MakeNewParticle();
+	Particle MakeNewParticle(const Vector3& translate);
 
 private:
 
 	// -----------------
 	// Particle本体
 	// -----------------
-	std::array<Particle, kNumMaxInstance> particles_{};
+	std::list<Particle> particles_;
 
 	// -----------------
 	// 乱数生成器
