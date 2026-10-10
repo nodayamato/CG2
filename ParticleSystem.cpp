@@ -14,21 +14,45 @@ void ParticleSystem::Initialize() {
 	// -----------------
 	// Particle生成
 	// -----------------
-	for (uint32_t index = 0;
-		index < kNumMaxInstance;
-		++index) {
-
-		particles_[index] =
-			MakeNewParticle();
-	}
+	AddParticles(3);
 
 	numInstance_ = 0;
 }
 
 // -----------------
+// Particle追加
+// -----------------
+void ParticleSystem::AddParticles(uint32_t count) {
+
+	for (uint32_t index = 0; index < count; ++index) {
+
+		particles_.push_back(
+			MakeNewParticle(
+				{ 0.0f, 0.0f, 0.0f }
+			)
+		);
+	}
+}
+
+// -----------------
+// EmitterからParticle生成
+// -----------------
+void ParticleSystem::Emit(const Emitter& emitter) {
+
+	for (uint32_t count = 0; count < emitter.count; ++count) {
+
+		particles_.push_back(
+			MakeNewParticle(
+				emitter.transform.translate
+			)
+		);
+	}
+}
+
+// -----------------
 // Particle生成
 // -----------------
-Particle ParticleSystem::MakeNewParticle() {
+Particle ParticleSystem::MakeNewParticle(const Vector3& translate) {
 
 	// -----------------
 	// 乱数
@@ -63,12 +87,18 @@ Particle ParticleSystem::MakeNewParticle() {
 	};
 
 	// -----------------
-	// 初期位置
+	// Emitterを基準にランダム配置
 	// -----------------
-	particle.transform.translate = {
+	Vector3 randomTranslate = {
 		distribution(randomEngine_),
 		distribution(randomEngine_),
 		distribution(randomEngine_)
+	};
+
+	particle.transform.translate = {
+		translate.x + randomTranslate.x,
+		translate.y + randomTranslate.y,
+		translate.z + randomTranslate.z
 	};
 
 	// -----------------
@@ -115,165 +145,186 @@ void ParticleSystem::Update(
 	bool useBillboard) {
 
 	// -----------------
-	// 描画数をリセット
+	// 描画数リセット
 	// -----------------
 	numInstance_ = 0;
 
 	// -----------------
 	// Particle更新
 	// -----------------
-	for (uint32_t index = 0;
-		index < kNumMaxInstance;
-		++index) {
+	for (std::list<Particle>::iterator particleIterator = particles_.begin(); particleIterator != particles_.end();) {
 
 		// -----------------
-		// 寿命切れ
+		// 寿命切れなら削除
 		// -----------------
-		if (particles_[index].lifeTime <
-			particles_[index].currentTime) {
+		if (particleIterator->lifeTime <=
+			particleIterator->currentTime) {
 
-			// 新しいParticleを生成
-			particles_[index] = MakeNewParticle();
+			particleIterator =
+				particles_.erase(
+					particleIterator
+				);
+
+			continue;
 		}
 
 		// -----------------
 		// 経過時間
 		// -----------------
-		particles_[index].currentTime +=
+		particleIterator->currentTime +=
 			deltaTime;
 
 		// -----------------
 		// 位置更新
 		// -----------------
-		particles_[index].transform.translate.x +=
-			particles_[index].velocity.x *
+		particleIterator->transform.translate.x +=
+			particleIterator->velocity.x *
 			deltaTime;
 
-		particles_[index].transform.translate.y +=
-			particles_[index].velocity.y *
+		particleIterator->transform.translate.y +=
+			particleIterator->velocity.y *
 			deltaTime;
 
-		particles_[index].transform.translate.z +=
-			particles_[index].velocity.z *
+		particleIterator->transform.translate.z +=
+			particleIterator->velocity.z *
 			deltaTime;
 
 		// -----------------
-		// Scaleを時間で変化
+		// Scale
 		// -----------------
-		
-		// 0.0 ～ 1.0 の経過割合
 		float t =
-			particles_[index].currentTime /
-			particles_[index].lifeTime;
+			particleIterator->currentTime /
+			particleIterator->lifeTime;
 
-		// 寿命に近づくほど小さくする
 		float scale =
 			1.0f - t;
 
-		particles_[index].transform.scale = {
+		particleIterator->transform.scale = {
 			scale,
 			scale,
 			scale
 		};
 
 		// -----------------
-		// Rotateを時間で変化
+		// Rotate
 		// -----------------
-
-		particles_[index].transform.rotate.z +=
+		particleIterator->transform.rotate.z +=
 			1.0f * deltaTime;
 
 		// -----------------
-		// World
+		// GPU最大数以内だけ描画データ作成
 		// -----------------
+		if (numInstance_ <
+			kNumMaxInstance) {
 
-		Matrix4x4 worldMatrix{};
-
-		if (useBillboard) {
+			Matrix4x4 worldMatrix{};
 
 			// -----------------
 			// Billboardあり
 			// -----------------
+			if (useBillboard) {
 
-			Matrix4x4 scaleMatrix =
-				MakeScaleMatrix(
-					particles_[index].transform.scale
-				);
+				Matrix4x4 scaleMatrix =
+					MakeScaleMatrix(
+						particleIterator->
+						transform.scale
+					);
 
-			Matrix4x4 translateMatrix =
-				MakeTranslateMatrix(
-					particles_[index].transform.translate
-				);
+				Matrix4x4 translateMatrix =
+					MakeTranslateMatrix(
+						particleIterator->
+						transform.translate
+					);
 
-			worldMatrix =
-				Multiply(
+				worldMatrix =
 					Multiply(
-						scaleMatrix,
-						billboardMatrix
-					),
-					translateMatrix
-				);
-		}
-		else {
+						Multiply(
+							scaleMatrix,
+							billboardMatrix
+						),
+						translateMatrix
+					);
+			}
 
 			// -----------------
 			// Billboardなし
 			// -----------------
-			worldMatrix =
-				MakeAffineMatrix(
-					particles_[index].transform.scale,
-					particles_[index].transform.rotate,
-					particles_[index].transform.translate
+			else {
+
+				worldMatrix =
+					MakeAffineMatrix(
+						particleIterator->
+						transform.scale,
+
+						particleIterator->
+						transform.rotate,
+
+						particleIterator->
+						transform.translate
+					);
+			}
+
+			// -----------------
+			// WVP
+			// -----------------
+			Matrix4x4
+				worldViewProjectionMatrix =
+				Multiply(
+					worldMatrix,
+					viewProjectionMatrix
 				);
+
+			// -----------------
+			// GPUへ送る
+			// -----------------
+			instancingData[numInstance_].WVP =
+				worldViewProjectionMatrix;
+
+			instancingData[numInstance_].World =
+				worldMatrix;
+
+			instancingData[numInstance_].color =
+				particleIterator->color;
+
+			// -----------------
+			// Alpha
+			// -----------------
+			float alpha =
+				1.0f -
+				(
+					particleIterator->
+					currentTime /
+
+					particleIterator->
+					lifeTime
+					);
+
+			instancingData[numInstance_].
+				color.w = alpha;
+
+			// -----------------
+			// Dissolve
+			// -----------------
+			float dissolve =
+				particleIterator->
+				currentTime /
+
+				particleIterator->
+				lifeTime;
+
+			instancingData[numInstance_].
+				dissolveThreshold =
+				dissolve;
+
+			// -----------------
+			// 描画数を増やす
+			// -----------------
+			++numInstance_;
 		}
 
 		// -----------------
-		// WVP
+		// 次のParticleへ
 		// -----------------
-		Matrix4x4 worldViewProjectionMatrix =
-			Multiply(
-				worldMatrix,
-				viewProjectionMatrix
-			);
-
-		// -----------------
-		// GPUへ渡す
-		// -----------------
-		instancingData[numInstance_].WVP =
-			worldViewProjectionMatrix;
-
-		instancingData[numInstance_].World =
-			worldMatrix;
-
-		instancingData[numInstance_].color =
-			particles_[index].color;
-
-		// -----------------
-		// 徐々に透明にする
-		// -----------------
-		float alpha =
-			1.0f -
-			(
-				particles_[index].currentTime /
-				particles_[index].lifeTime
-				);
-
-		instancingData[numInstance_].color.w = alpha;
-
-		// -----------------
-		// Dissolve
-		// -----------------
-
-		// 0.0 ～ 1.0
-		float dissolve =
-			particles_[index].currentTime /
-			particles_[index].lifeTime;
-
-		instancingData[numInstance_].dissolveThreshold = dissolve;
-
-		// -----------------
-		// 描画数を増やす
-		// -----------------
-		++numInstance_;
+		++particleIterator;
 	}
 }
