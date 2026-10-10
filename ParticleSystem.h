@@ -14,6 +14,22 @@ struct Emitter {
 	float frequencyTime; // 経過時間
 };
 
+// -----------------
+// AABB
+// -----------------
+struct AABB {
+	Vector3 min;
+	Vector3 max;
+};
+
+// -----------------
+// AccelerationField
+// -----------------
+struct AccelerationField {
+	Vector3 acceleration;
+	AABB area;
+};
+
 class ParticleSystem {
 public:
 
@@ -38,6 +54,13 @@ public:
 	void Emit(const Emitter& emitter);
 
 	// -----------------
+	// AccelerationField設定
+	// -----------------
+	void SetAccelerationField(
+		const AccelerationField& field
+	);
+
+	// -----------------
 	// 更新
 	// -----------------
 	void Update(
@@ -45,7 +68,8 @@ public:
 		const Matrix4x4& billboardMatrix,
 		ParticleForGPU* instancingData,
 		float deltaTime,
-		bool useBillboard
+		bool useBillboard,
+		bool useAccelerationField
 	);
 
 	// -----------------
@@ -68,6 +92,11 @@ private:
 	// Particle本体
 	// -----------------
 	std::list<Particle> particles_;
+
+	// -----------------
+	// AccelerationField
+	// -----------------
+	AccelerationField accelerationField_{};
 
 	// -----------------
 	// 乱数生成器

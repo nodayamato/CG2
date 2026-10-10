@@ -1717,6 +1717,33 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	particleSystem.Initialize();
 
 	// -----------------
+	// AccelerationField
+	// -----------------
+	AccelerationField accelerationField{};
+
+	accelerationField.acceleration = {
+		15.0f,
+		0.0f,
+		0.0f
+	};
+
+	accelerationField.area.min = {
+		-1.0f,
+		-1.0f,
+		-1.0f
+	};
+
+	accelerationField.area.max = {
+		1.0f,
+		1.0f,
+		1.0f
+	};
+
+	particleSystem.SetAccelerationField(
+		accelerationField
+	);
+
+	// -----------------
 	// Emitter
 	// -----------------
 	Emitter emitter{};
@@ -1739,6 +1766,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// Billboardを使うか
 	bool useBillboard = true;
+
+	// AccelerationFieldを使うか
+	bool useAccelerationField = true;
 
 	// Particle用UVTransform
 	Transform particleUVTransform{
@@ -2194,7 +2224,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			billboardMatrix,
 			instancingData,
 			kDeltaTime,
-			useBillboard
+			useBillboard,
+			useAccelerationField
 		);
 
 		// 描画するParticle数
@@ -2296,6 +2327,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// Billboard
 		ImGui::Checkbox("useBillboard", &useBillboard);
+
+		// AccelerationField
+		ImGui::Checkbox("useAccelerationField", &useAccelerationField);
 
 		// Emitter位置
 		ImGui::DragFloat3(
