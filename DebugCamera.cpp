@@ -67,6 +67,9 @@ void DebugCamera::Initialize()
 		target_.z + offset.z
 	};
 
+	// カメラのワールド座標を保存
+	worldPosition_ = cameraPosition;
+
 	// ------------------------------
 	// カメラのWorld行列
 	// ------------------------------
@@ -207,6 +210,9 @@ void DebugCamera::Update(Input* input)
 		target_.y + offset.y,
 		target_.z + offset.z
 	};
+
+	// カメラのワールド座標を保存
+	worldPosition_ = cameraPosition;
 
 	// ==================================================
 	// ビュー行列を更新
