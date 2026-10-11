@@ -78,16 +78,16 @@ PixelShaderOutput main(VertexShaderOutput input)
         float32_t3 normal = normalize(input.normal);
         // 法線と光源の方向の内積
         float NdotL = dot(normal, -gDirectionalLight.direction);
-        // ランバートの法則
+        // Half Lambert
         float cos = pow(NdotL * 0.5f + 0.5f, 2.0f);
         // Cameraへの方向
         float32_t3 toEye = normalize(gCamera.worldPosition - input.worldPosition);
-        // 反射ベクトル
-        float32_t3 reflectLight = reflect(gDirectionalLight.direction, normal);
+        // HalfVector
+        float32_t3 halfVector = normalize(-gDirectionalLight.direction + toEye);
+        // 法線とHalfVectorの内積
+        float NDotH = dot(normal, halfVector);
         // 鏡面反射の強さ
-        float RdotE = dot(reflectLight, toEye);
-        // 鏡面反射の強さを0.0～1.0に制限して、shininess乗する
-        float specularPow = pow(saturate(RdotE), gMaterial.shininess);
+        float specularPow = pow(saturate(NDotH), gMaterial.shininess);
         // 拡散反射
         float32_t3 diffuse = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
         // 鏡面反射
