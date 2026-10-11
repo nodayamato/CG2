@@ -31,6 +31,13 @@ public:
 		return projectionMatrix_;
 	}
 
+	/// <summary>
+	/// カメラのワールド座標を取得
+	/// </summary>
+	const Vector3& GetWorldPosition() const {
+		return worldPosition_;
+	}
+
 private:
 	// 累積回転行列
 	Matrix4x4 matRot_{};
@@ -50,4 +57,11 @@ private:
 
 	// 射影行列
 	Matrix4x4 projectionMatrix_{};
+
+	// カメラのワールド座標
+	Vector3 worldPosition_ = {
+		0.0f,
+		0.0f,
+		-50.0f
+	};
 };

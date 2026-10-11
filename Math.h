@@ -37,10 +37,21 @@ struct Matrix4x4 {
 struct Material {
 	Vector4 color;
 	int enableLighting;
+	// 鏡面反射の鋭さ
+	float shininess;
 	// ConstantBufferのアライメントを合わせるための余白
-	float padding[3];
+	float padding[2];
 	// UV座標変換行列
 	Matrix4x4 uvTransform;
+};
+
+// -----------------
+// GPUへ送るCamera情報
+// -----------------
+struct CameraForGPU {
+	Vector3 worldPosition;
+	// 16byte境界合わせ
+	float padding;
 };
 
 // 平行光源
@@ -86,6 +97,9 @@ struct ParticleForGPU {
 	// アラインメント調整
 	float padding[3];
 };
+
+// Vector3を正規化
+Vector3 Normalize(const Vector3& vector);
 
 // 4x4単位行列を作る
 Matrix4x4 MakeIdentity4x4();

@@ -1106,7 +1106,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// RootParameter作成
-	D3D12_ROOT_PARAMETER rootParameters[4] = {};
+	D3D12_ROOT_PARAMETER rootParameters[5] = {};
 	// CBVを設定
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	// PixelShaderを設定
@@ -1155,6 +1155,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	// HLSL側のregister(b1)と対応
 	rootParameters[3].Descriptor.ShaderRegister = 1;
+
+	// Camera用CBV
+	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	// HLSLの register(b2)
+	rootParameters[4].Descriptor.ShaderRegister = 2;
 
 	// シリアライズ
 	ID3DBlob* signatureBlob = nullptr;
@@ -1785,9 +1791,217 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ------------------------------
 
 	// resourcesフォルダにあるplane.objを読み込む
-	ModelData modelData = LoadObjFile("resources", "fence.obj");
+	//ModelData modelData = LoadObjFile("resources", "plane.obj");
 
 	// OBJファイルに頂点が入っていることを確認する
+	//assert(!modelData.vertices.empty());
+
+	// ------------------------------
+	// 球モデルを生成
+	// ------------------------------
+
+	ModelData modelData{};
+
+	// -----------------
+	// 球の分割数
+	// -----------------
+	const uint32_t kSubdivision = 16;
+
+	// -----------------
+	// 経度1つ分の角度
+	// -----------------
+	const float kLonEvery =
+		std::numbers::pi_v<float> *2.0f /
+		static_cast<float>(kSubdivision);
+
+	// -----------------
+	// 緯度1つ分の角度
+	// -----------------
+	const float kLatEvery =
+		std::numbers::pi_v<float> /
+		static_cast<float>(kSubdivision);
+
+	// -----------------
+	// 頂点数を確保
+	// 1マスにつき三角形2枚 = 6頂点
+	// -----------------
+	modelData.vertices.resize(
+		kSubdivision *
+		kSubdivision *
+		6
+	);
+
+	// -----------------
+	// 緯度方向
+	// -----------------
+	for (uint32_t latIndex = 0;
+		latIndex < kSubdivision;
+		++latIndex) {
+
+		// -π/2 ～ π/2
+		float lat =
+			-std::numbers::pi_v<float> / 2.0f +
+			kLatEvery *
+			static_cast<float>(latIndex);
+
+		float nextLat =
+			lat +
+			kLatEvery;
+
+		// -----------------
+		// 経度方向
+		// -----------------
+		for (uint32_t lonIndex = 0;
+			lonIndex < kSubdivision;
+			++lonIndex) {
+
+			float lon =
+				kLonEvery *
+				static_cast<float>(lonIndex);
+
+			float nextLon =
+				lon +
+				kLonEvery;
+
+			// -----------------
+			// このマスの先頭Index
+			// -----------------
+			uint32_t start =
+				(latIndex * kSubdivision +
+					lonIndex) *
+				6;
+
+			// -----------------
+			// a : 左下
+			// -----------------
+			Vector4 a = {
+				std::cos(lat) *
+					std::cos(lon),
+
+				std::sin(lat),
+
+				std::cos(lat) *
+					std::sin(lon),
+
+				1.0f
+			};
+
+			// -----------------
+			// b : 左上
+			// -----------------
+			Vector4 b = {
+				std::cos(nextLat) *
+					std::cos(lon),
+
+				std::sin(nextLat),
+
+				std::cos(nextLat) *
+					std::sin(lon),
+
+				1.0f
+			};
+
+			// -----------------
+			// c : 右下
+			// -----------------
+			Vector4 c = {
+				std::cos(lat) *
+					std::cos(nextLon),
+
+				std::sin(lat),
+
+				std::cos(lat) *
+					std::sin(nextLon),
+
+				1.0f
+			};
+
+			// -----------------
+			// d : 右上
+			// -----------------
+			Vector4 d = {
+				std::cos(nextLat) *
+					std::cos(nextLon),
+
+				std::sin(nextLat),
+
+				std::cos(nextLat) *
+					std::sin(nextLon),
+
+				1.0f
+			};
+
+			// -----------------
+			// UV
+			// -----------------
+
+			float u0 =
+				static_cast<float>(lonIndex) /
+				static_cast<float>(kSubdivision);
+
+			float u1 =
+				static_cast<float>(lonIndex + 1) /
+				static_cast<float>(kSubdivision);
+
+			float v0 =
+				1.0f -
+				static_cast<float>(latIndex) /
+				static_cast<float>(kSubdivision);
+
+			float v1 =
+				1.0f -
+				static_cast<float>(latIndex + 1) /
+				static_cast<float>(kSubdivision);
+
+			// -----------------
+			// 1枚目
+			// a → b → c
+			// -----------------
+
+			modelData.vertices[start + 0] = {
+				.position = a,
+				.texcoord = {u0, v0},
+				.normal = {a.x, a.y, a.z}
+			};
+
+			modelData.vertices[start + 1] = {
+				.position = b,
+				.texcoord = {u0, v1},
+				.normal = {b.x, b.y, b.z}
+			};
+
+			modelData.vertices[start + 2] = {
+				.position = c,
+				.texcoord = {u1, v0},
+				.normal = {c.x, c.y, c.z}
+			};
+
+			// -----------------
+			// 2枚目
+			// c → b → d
+			// -----------------
+
+			modelData.vertices[start + 3] = {
+				.position = c,
+				.texcoord = {u1, v0},
+				.normal = {c.x, c.y, c.z}
+			};
+
+			modelData.vertices[start + 4] = {
+				.position = b,
+				.texcoord = {u0, v1},
+				.normal = {b.x, b.y, b.z}
+			};
+
+			modelData.vertices[start + 5] = {
+				.position = d,
+				.texcoord = {u1, v1},
+				.normal = {d.x, d.y, d.z}
+			};
+		}
+	}
+
+	// 頂点が作れているか確認
 	assert(!modelData.vertices.empty());
 
 	// ------------------------------
@@ -1840,6 +2054,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialData->color = { 1.0f,1.0f,1.0f,1.0f };
 	materialData->enableLighting = true;
 
+	// 鏡面反射の鋭さ
+	materialData->shininess = 32.0f;
+
 	// 球のUVは最初は変形しない
 	materialData->uvTransform = MakeIdentity4x4();
 
@@ -1884,9 +2101,32 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	};
 
 	particleMaterialData->enableLighting = false;
+	particleMaterialData->shininess = 32.0f;
+	particleMaterialData->uvTransform = MakeIdentity4x4();
 
-	particleMaterialData->uvTransform =
-		MakeIdentity4x4();
+	// ------------------------------
+	// Camera用Resource
+	// ------------------------------
+
+	ID3D12Resource* cameraResource =
+		CreateBufferResource(
+			device,
+			256
+		);
+
+	CameraForGPU* cameraData = nullptr;
+
+	cameraResource->Map(
+		0,
+		nullptr,
+		reinterpret_cast<void**>(
+			&cameraData
+			)
+	);
+
+	// Camera初期値
+	cameraData->worldPosition = debugCamera.GetWorldPosition();
+	cameraData->padding = 0.0f;
 
 	// ------------------------------
 	// 平行光源用リソースを作る
@@ -1926,6 +2166,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	materialDataSprite->color = { 1.0f,1.0f,1.0f,1.0f };
 	materialDataSprite->enableLighting = false;
+	materialDataSprite->shininess = 32.0f;
 
 	// SpriteのUVも最初は変形しない
 	materialDataSprite->uvTransform = MakeIdentity4x4();
@@ -1989,7 +2230,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
 
 	// 2枚目のTexture
-	DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
+	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
 	ID3D12Resource* intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
@@ -2134,7 +2375,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// デバッグカメラ更新
 		// ------------------------------
 
-		debugCamera.Update(&input);
+		bool isImGuiUsingMouse = false;
+
+#ifdef USE_IMGUI
+
+		// ImGuiがマウス入力を使っているか
+		isImGuiUsingMouse = ImGui::GetIO().WantCaptureMouse;
+
+#endif
+
+		// ImGui操作中はCameraを動かさない
+		if (!isImGuiUsingMouse) {
+			debugCamera.Update(&input);
+		}
+
+		// Camera位置をGPUへ送る
+		cameraData->worldPosition = debugCamera.GetWorldPosition();
 
 		// ------------------------------
 		// 3Dモデル用行列更新
@@ -2317,9 +2573,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef USE_IMGUI
 
 		// ImGuiのウィンドウを表示する
-		//ImGui::ShowDemoWindow();
-
-		// ImGuiのウィンドウを表示する
 		ImGui::Begin("Material");
 
 		// モデルの回転角度を編集する
@@ -2370,21 +2623,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ライトの色
 		ImGui::ColorEdit4("Light Color", &directionalLightData->color.x);
 		// ライトの向き
-		ImGui::DragFloat3("Light Direction", &directionalLightData->direction.x, 0.01f);
-
-		ImGui::End();
-
-		// ImGuiのウィンドウを表示する
-		ImGui::Begin("Sprite");
-
-		// Sprite本体の座標を変更する
-		ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f);
-		// UVの平行移動
-		ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-		// UVの拡縮
-		ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-		// UVのZ軸回転
-		ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+		if (ImGui::DragFloat3("Light Direction",&directionalLightData->direction.x,0.01f)) {
+			directionalLightData->direction = Normalize(directionalLightData->direction);
+		}
+		// ライトの強さ
+		ImGui::DragFloat("Shininess", &materialData->shininess, 1.0f, 1.0f, 256.0f);
 
 		ImGui::End();
 
@@ -2482,7 +2725,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 
 			// OBJモデル用Materialを設定
-			commandList->SetGraphicsRootConstantBufferView(0, particleMaterialResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
 			// OBJモデル用TransformationMatrixを設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
@@ -2490,12 +2733,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 平行光源を設定
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
 
+			// Cameraの位置を設定
+			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
+
 			// 使うTextureを設定
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			// OBJモデルを描画する
-			// LoadObjFileで面を頂点列へ展開済みなのでDrawInstancedを使う
-			//commandList->DrawInstanced(static_cast<UINT>(modelData.vertices.size()), 1, 0, 0);
+			commandList->DrawInstanced(static_cast<UINT>(modelData.vertices.size()), 1, 0, 0);
 
 			// フラグが変わってもspriteを変えない
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
@@ -2524,7 +2769,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// Material
 			commandList->SetGraphicsRootConstantBufferView(
 				0,
-				materialResource->GetGPUVirtualAddress()
+				particleMaterialResource->GetGPUVirtualAddress()
 			);
 
 			// Instancing用StructuredBuffer
@@ -2540,17 +2785,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			);
 
 			// 生存しているパーティクルだけ描画
-			if (numInstance > 0) {
+			//if (numInstance > 0) {
 
-				commandList->DrawInstanced(
-					static_cast<UINT>(
-						particleModelData.vertices.size()
-						),
-					numInstance,
-					0,
-					0
-				);
-			}
+			//	commandList->DrawInstanced(
+			//		static_cast<UINT>(
+			//			particleModelData.vertices.size()
+			//			),
+			//		numInstance,
+			//		0,
+			//		0
+			//	);
+			//}
 
 			// ---------------------
 			// Sprite描画
@@ -2698,6 +2943,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	transformationMatrixResourceSprite->Release();
 	materialResourceSprite->Release();
 	directionalLightResource->Release();
+	cameraResource->Release();
 
 	CloseHandle(fenceEvent);
 	fence->Release();

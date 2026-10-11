@@ -1,6 +1,32 @@
 #include "Math.h"
 #include <cmath>
 
+// Vector3を正規化
+Vector3 Normalize(const Vector3& vector) {
+
+	float length =
+		std::sqrt(
+			vector.x * vector.x +
+			vector.y * vector.y +
+			vector.z * vector.z
+		);
+
+	if (length == 0.0f) {
+
+		return {
+			0.0f,
+			0.0f,
+			0.0f
+		};
+	}
+
+	return {
+		vector.x / length,
+		vector.y / length,
+		vector.z / length
+	};
+}
+
 // 4x4単位行列を作る
 Matrix4x4 MakeIdentity4x4() {
 	Matrix4x4 result{};
