@@ -1484,7 +1484,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	};
 
 	// ParticleはNormalブレンド
-	particlePipelineStateDesc.BlendState = blendDesc[kBlendModeAdd];
+	particlePipelineStateDesc.BlendState = blendDesc[kBlendModeNormal];
 
 	ID3D12PipelineState* particlePipelineState = nullptr;
 
@@ -1492,11 +1492,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		&particlePipelineStateDesc,
 		IID_PPV_ARGS(&particlePipelineState)
 	);
-
+	
 	assert(SUCCEEDED(hr));
 
 	// 現在のブレンドモード
-	BlendMode blendMode = kBlendModeAdd;
+	BlendMode blendMode = kBlendModeNormal;
 
 	// ------------------------------
 	// Sprite用頂点リソースを作る
@@ -2072,6 +2072,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 単位行列を書き込んでおく
 	wvpData->WVP = MakeIdentity4x4();
 	wvpData->World = MakeIdentity4x4();
+	wvpData->WorldInverseTranspose = MakeIdentity4x4();
 
 	// Transform変数を作る
 	Transform transform{
@@ -2180,6 +2181,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 単位行列
 	transformationMatrixDataSprite->WVP = MakeIdentity4x4();
 	transformationMatrixDataSprite->World = MakeIdentity4x4();
+	transformationMatrixDataSprite->WorldInverseTranspose = MakeIdentity4x4();
 
 	// Sprite用Transform
 	Transform transformSprite{
@@ -2402,6 +2404,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Matrix4x4 viewMatrix = debugCamera.GetViewMatrix();
 		// DebugCameraから射影行列を取得
 		Matrix4x4 projectionMatrix = debugCamera.GetProjectionMatrix();
+		// ワールド行列、ビュー行列、射影行列を合成してWVP行列を作る
+		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+		// World行列の逆行列を作る
+		Matrix4x4 worldInverseMatrix = Inverse(worldMatrix);
+		Matrix4x4 worldInverseTranspose = MakeIdentity4x4();
+		for (int y = 0; y < 4; ++y) {
+			for (int x = 0; x < 4; ++x) {
+
+				worldInverseTranspose.m[y][x] =
+					worldInverseMatrix.m[x][y];
+			}
+		}
+		// GPUへ転送
+		wvpData->WVP = worldViewProjectionMatrix;
+		// Lightingで使用するWorld行列
+		wvpData->World = worldMatrix;
+		// Lightingで使用するWorldの逆行列の転置行列
+		wvpData->WorldInverseTranspose = worldInverseTranspose;
 
 		// -----------------
 		// BillboardMatrix
@@ -2440,13 +2460,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		billboardMatrix.m[3][0] = 0.0f;
 		billboardMatrix.m[3][1] = 0.0f;
 		billboardMatrix.m[3][2] = 0.0f;
-
-		// ワールド行列、ビュー行列、射影行列を合成してWVP行列を作る
-		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-		// GPUへ転送
-		wvpData->WVP = worldViewProjectionMatrix;
-		// Lightingで使用するWorld行列
-		wvpData->World = worldMatrix;
 
 		// -----------------
 		// Particle行列更新
@@ -2529,25 +2542,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		particleMaterialData->uvTransform =
 			particleUVMatrix;
 
-		// -----------------
-		// Particle表示確認
-		// -----------------
-
-		Matrix4x4 particleWorldMatrix =
-			MakeAffineMatrix(
-				{ 3.0f, 3.0f, 3.0f },
-				{ 0.0f, 0.0f, 0.0f },
-				{ 0.0f, 0.0f, 0.0f }
-			);
-
-		wvpData->WVP =
-			Multiply(
-				particleWorldMatrix,
-				Multiply(viewMatrix, projectionMatrix)
-			);
-
-		wvpData->World = particleWorldMatrix;
-
 		// ---------------------
 		// Sprite用WVP
 		// ---------------------
@@ -2570,10 +2564,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// Sprite用World行列をGPUへ渡す
 		transformationMatrixDataSprite->World = worldMatrixSprite;
 
+		// Sprite用Worldの逆行列の転置行列をGPUへ渡す
+		transformationMatrixDataSprite->WorldInverseTranspose = MakeIdentity4x4();
+
 #ifdef USE_IMGUI
 
 		// ImGuiのウィンドウを表示する
 		ImGui::Begin("Material");
+
+		// -----------------
+		// 球のスケール
+		// -----------------
+		ImGui::DragFloat3(
+			"SphereScale",
+			&transform.scale.x,
+			0.01f,
+			0.01f,
+			10.0f
+		);
 
 		// モデルの回転角度を編集する
 		ImGui::DragFloat3("ModelRotate", &transform.rotate.x, 0.01f);

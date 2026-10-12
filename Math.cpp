@@ -220,34 +220,127 @@ Matrix4x4 Inverse(const Matrix4x4& m)
 {
 	Matrix4x4 result{};
 
-	result.m[0][0] = m.m[0][0];
-	result.m[0][1] = m.m[1][0];
-	result.m[0][2] = m.m[2][0];
+	// -----------------
+	// 左上3x3の行列式
+	// -----------------
+	float determinant =
+		m.m[0][0] * (
+			m.m[1][1] * m.m[2][2] -
+			m.m[1][2] * m.m[2][1]
+			)
+		-
+		m.m[0][1] * (
+			m.m[1][0] * m.m[2][2] -
+			m.m[1][2] * m.m[2][0]
+			)
+		+
+		m.m[0][2] * (
+			m.m[1][0] * m.m[2][1] -
+			m.m[1][1] * m.m[2][0]
+			);
 
-	result.m[1][0] = m.m[0][1];
-	result.m[1][1] = m.m[1][1];
-	result.m[1][2] = m.m[2][1];
+	// 逆行列を作れない場合
+	if (std::fabs(determinant) < 0.000001f) {
 
-	result.m[2][0] = m.m[0][2];
-	result.m[2][1] = m.m[1][2];
-	result.m[2][2] = m.m[2][2];
+		return MakeIdentity4x4();
+	}
 
-	result.m[3][3] = 1.0f;
+	float inverseDeterminant = 1.0f / determinant;
+
+	// -----------------
+	// 3x3部分の逆行列
+	// -----------------
+
+	result.m[0][0] =
+		(
+			m.m[1][1] * m.m[2][2] -
+			m.m[1][2] * m.m[2][1]
+			) * inverseDeterminant;
+
+	result.m[0][1] =
+		(
+			m.m[0][2] * m.m[2][1] -
+			m.m[0][1] * m.m[2][2]
+			) * inverseDeterminant;
+
+	result.m[0][2] =
+		(
+			m.m[0][1] * m.m[1][2] -
+			m.m[0][2] * m.m[1][1]
+			) * inverseDeterminant;
+
+
+	result.m[1][0] =
+		(
+			m.m[1][2] * m.m[2][0] -
+			m.m[1][0] * m.m[2][2]
+			) * inverseDeterminant;
+
+	result.m[1][1] =
+		(
+			m.m[0][0] * m.m[2][2] -
+			m.m[0][2] * m.m[2][0]
+			) * inverseDeterminant;
+
+	result.m[1][2] =
+		(
+			m.m[0][2] * m.m[1][0] -
+			m.m[0][0] * m.m[1][2]
+			) * inverseDeterminant;
+
+
+	result.m[2][0] =
+		(
+			m.m[1][0] * m.m[2][1] -
+			m.m[1][1] * m.m[2][0]
+			) * inverseDeterminant;
+
+	result.m[2][1] =
+		(
+			m.m[0][1] * m.m[2][0] -
+			m.m[0][0] * m.m[2][1]
+			) * inverseDeterminant;
+
+	result.m[2][2] =
+		(
+			m.m[0][0] * m.m[1][1] -
+			m.m[0][1] * m.m[1][0]
+			) * inverseDeterminant;
+
+	// -----------------
+	// 平行移動の逆変換
+	// 行ベクトル形式
+	// -----------------
 
 	result.m[3][0] =
-		-(m.m[3][0] * result.m[0][0] +
+		-(
+			m.m[3][0] * result.m[0][0] +
 			m.m[3][1] * result.m[1][0] +
-			m.m[3][2] * result.m[2][0]);
+			m.m[3][2] * result.m[2][0]
+			);
 
 	result.m[3][1] =
-		-(m.m[3][0] * result.m[0][1] +
+		-(
+			m.m[3][0] * result.m[0][1] +
 			m.m[3][1] * result.m[1][1] +
-			m.m[3][2] * result.m[2][1]);
+			m.m[3][2] * result.m[2][1]
+			);
 
 	result.m[3][2] =
-		-(m.m[3][0] * result.m[0][2] +
+		-(
+			m.m[3][0] * result.m[0][2] +
 			m.m[3][1] * result.m[1][2] +
-			m.m[3][2] * result.m[2][2]);
+			m.m[3][2] * result.m[2][2]
+			);
+
+	// -----------------
+	// 残り
+	// -----------------
+
+	result.m[0][3] = 0.0f;
+	result.m[1][3] = 0.0f;
+	result.m[2][3] = 0.0f;
+	result.m[3][3] = 1.0f;
 
 	return result;
 }
