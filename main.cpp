@@ -1106,7 +1106,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// RootParameter作成
-	D3D12_ROOT_PARAMETER rootParameters[5] = {};
+	D3D12_ROOT_PARAMETER rootParameters[6] = {};
 	// CBVを設定
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	// PixelShaderを設定
@@ -1161,6 +1161,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	// HLSLの register(b2)
 	rootParameters[4].Descriptor.ShaderRegister = 2;
+
+	// PointLight用CBV
+	rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	// HLSLの register(b3)
+	rootParameters[5].Descriptor.ShaderRegister = 3;
 
 	// シリアライズ
 	ID3DBlob* signatureBlob = nullptr;
@@ -1787,16 +1793,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	const float kDeltaTime = 1.0f / 60.0f;
 
 	// ------------------------------
-	// OBJモデルを読み込む
-	// ------------------------------
-
-	// resourcesフォルダにあるplane.objを読み込む
-	//ModelData modelData = LoadObjFile("resources", "plane.obj");
-
-	// OBJファイルに頂点が入っていることを確認する
-	//assert(!modelData.vertices.empty());
-
-	// ------------------------------
 	// 球モデルを生成
 	// ------------------------------
 
@@ -2077,8 +2073,109 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// Transform変数を作る
 	Transform transform{
 		{1.0f, 1.0f, 1.0f},
-		{0.0f, std::numbers::pi_v<float>, 0.0f},
+		{0.0f, -1.54f, 0.0f},
 		{0.0f, 0.0f, 0.0f}
+	};
+
+	// ------------------------------
+	// 2個目のOBJモデルを読み込む
+	// ------------------------------
+
+	ModelData modelData2 =
+		LoadObjFile(
+			"resources",
+			"terrain.obj"
+		);
+
+	assert(!modelData2.vertices.empty());
+
+	// ------------------------------
+	// 2個目の頂点リソース
+	// ------------------------------
+
+	ID3D12Resource* vertexResource2 =
+		CreateBufferResource(
+			device,
+			sizeof(VertexData) *
+			modelData2.vertices.size()
+		);
+
+	// ------------------------------
+	// 2個目のVertexBufferView
+	// ------------------------------
+
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView2{};
+
+	vertexBufferView2.BufferLocation =
+		vertexResource2->GetGPUVirtualAddress();
+
+	vertexBufferView2.SizeInBytes =
+		static_cast<UINT>(
+			sizeof(VertexData) *
+			modelData2.vertices.size()
+			);
+
+	vertexBufferView2.StrideInBytes =
+		sizeof(VertexData);
+
+	// ------------------------------
+	// 頂点を書き込む
+	// ------------------------------
+
+	VertexData* vertexData2 = nullptr;
+
+	vertexResource2->Map(
+		0,
+		nullptr,
+		reinterpret_cast<void**>(
+			&vertexData2
+			)
+	);
+
+	std::memcpy(
+		vertexData2,
+		modelData2.vertices.data(),
+		sizeof(VertexData)*
+		modelData2.vertices.size()
+	);
+
+	// ------------------------------
+	// 2個目のWVP
+	// ------------------------------
+
+	ID3D12Resource* wvpResource2 =
+		CreateBufferResource(
+			device,
+			sizeof(TransformationMatrix)
+		);
+
+	TransformationMatrix* wvpData2 = nullptr;
+
+	wvpResource2->Map(
+		0,
+		nullptr,
+		reinterpret_cast<void**>(
+			&wvpData2
+			)
+	);
+
+	wvpData2->WVP =
+		MakeIdentity4x4();
+
+	wvpData2->World =
+		MakeIdentity4x4();
+
+	wvpData2->WorldInverseTranspose =
+		MakeIdentity4x4();
+
+	// ------------------------------
+	// 2個目のTransform
+	// ------------------------------
+
+	Transform transform2{
+		{1.0f, 1.0f, 1.0f},
+		{0.0f, -1.54f, 0.0f},
+		{3.0f, 0.0f, 0.0f}
 	};
 
 	// -----------------
@@ -2135,22 +2232,51 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// 平行光源用ConstantBufferを作成
 	ID3D12Resource* directionalLightResource = CreateBufferResource(device, sizeof(DirectionalLight));
-
 	// CPUから書き込むためのポインタ
 	DirectionalLight* directionalLightData = nullptr;
-
 	// ResourceをMapして書き込み先を取得
 	directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
-
-	// ライトの色を白にする
+	// 色
 	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-	// ライトを上から下へ向ける
-	// この値はすでに単位ベクトル
+	// 向き
 	directionalLightData->direction = { 0.0f, -1.0f, 0.0f };
-
-	// ライトの明るさ
+	// 明るさ
 	directionalLightData->intensity = 1.0f;
+
+	// ------------------------------
+	// 点光源用リソースを作る
+	// ------------------------------
+
+	// 点光源用ConstantBufferを作成
+	ID3D12Resource* pointLightResource = CreateBufferResource(device, sizeof(PointLight));
+	// CPUから書き込むためのポインタ
+	PointLight* pointLightData = nullptr;
+	// ResourceをMapして書き込み先を取得
+	pointLightResource->Map(0, nullptr, reinterpret_cast<void**>(&pointLightData));
+	// 色
+	pointLightData->color = { 1.0f,1.0f,1.0f,1.0f };
+	// 位置
+	pointLightData->position = { 0.0f,2.0f,0.0f };
+	// 明るさ
+	pointLightData->intensity = 1.0f;
+	// ライトが届く最大距離
+	pointLightData->radius = 10.0f;
+	// 減衰率
+	pointLightData->decay = 1.0f;
+	// padding
+	pointLightData->padding[0] = 0.0f;
+	pointLightData->padding[1] = 0.0f;
+
+	// ------------------------------
+	// Light ON / OFF
+	// ------------------------------
+
+	bool useDirectionalLight = true;
+	bool usePointLight = true;
+
+	// ImGuiで編集する本来の強さ
+	float directionalLightIntensity = 1.0f;
+	float pointLightIntensity = 1.0f;
 
 	// --------------------------------
 	// Sprite用TransformationMatrix
@@ -2237,6 +2363,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
 	ID3D12Resource* intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
 
+	// 3枚目のTexture(2個目OBJ)
+	DirectX::ScratchImage mipImages3 = LoadTexture(modelData2.material.textureFilePath);
+	const DirectX::TexMetadata& metadata3 = mipImages3.GetMetadata();
+	ID3D12Resource* textureResource3 = CreateTextureResource(device, metadata3);
+	ID3D12Resource* intermediateResource3 = UploadTextureData(textureResource3, mipImages3, device, commandList);
+
 	// metaDataを基にSRVの設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = metadata.format;
@@ -2268,6 +2400,49 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// SRVの生成
 	device->CreateShaderResourceView(textureResource2, &srvDesc2, textureSrvHandleCPU2);
+
+	// ------------------------------
+	// 3枚目のSRV
+	// 2個目OBJ用Texture
+	// ------------------------------
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc3{};
+
+	srvDesc3.Format =
+		metadata3.format;
+
+	srvDesc3.Shader4ComponentMapping =
+		D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+	srvDesc3.ViewDimension =
+		D3D12_SRV_DIMENSION_TEXTURE2D;
+
+	srvDesc3.Texture2D.MipLevels =
+		static_cast<UINT>(
+			metadata3.mipLevels
+			);
+
+	// Descriptor4番を使用
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU3 =
+		GetCPUDescriptorHandle(
+			srvDescriptorHeap,
+			descriptorSizeSRV,
+			4
+		);
+
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 =
+		GetGPUDescriptorHandle(
+			srvDescriptorHeap,
+			descriptorSizeSRV,
+			4
+		);
+
+	// SRV生成
+	device->CreateShaderResourceView(
+		textureResource3,
+		&srvDesc3,
+		textureSrvHandleCPU3
+	);
 
 	// どちらのTextureを使うかのフラグ
 	bool useMonsterBall = true;
@@ -2423,6 +2598,30 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// Lightingで使用するWorldの逆行列の転置行列
 		wvpData->WorldInverseTranspose = worldInverseTranspose;
 
+		// ------------------------------
+		// 2個目のモデル行列更新
+		// ------------------------------
+
+		Matrix4x4 worldMatrix2 = MakeAffineMatrix(transform2.scale, transform2.rotate, transform2.translate);
+		// WVP
+		Matrix4x4 worldViewProjectionMatrix2 = Multiply(worldMatrix2, Multiply(viewMatrix, projectionMatrix));
+		// 逆行列
+		Matrix4x4 worldInverseMatrix2 = Inverse(worldMatrix2);
+		// 逆転置
+		Matrix4x4 worldInverseTranspose2 = MakeIdentity4x4();
+		for (int y = 0; y < 4; ++y) {
+
+			for (int x = 0; x < 4; ++x) {
+
+				worldInverseTranspose2.m[y][x] =
+					worldInverseMatrix2.m[x][y];
+			}
+		}
+		// GPUへ送る
+		wvpData2->WVP = worldViewProjectionMatrix2;
+		wvpData2->World = worldMatrix2;
+		wvpData2->WorldInverseTranspose = worldInverseTranspose2;
+
 		// -----------------
 		// BillboardMatrix
 		// -----------------
@@ -2548,22 +2747,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// World
 		Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
-
 		// View
 		Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
-
 		// Projection
 		Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
-
 		// WVP
 		Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
-
 		// Sprite用WVP行列をGPUへ渡す
 		transformationMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
-
 		// Sprite用World行列をGPUへ渡す
 		transformationMatrixDataSprite->World = worldMatrixSprite;
-
 		// Sprite用Worldの逆行列の転置行列をGPUへ渡す
 		transformationMatrixDataSprite->WorldInverseTranspose = MakeIdentity4x4();
 
@@ -2586,27 +2779,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// モデルの回転角度を編集する
 		ImGui::DragFloat3("ModelRotate", &transform.rotate.x, 0.01f);
 
-		// Billboard
-		ImGui::Checkbox("useBillboard", &useBillboard);
-
-		// AccelerationField
-		ImGui::Checkbox("useAccelerationField", &useAccelerationField);
-
-		// Emitter位置
-		ImGui::DragFloat3(
-			"EmitterTranslate",
-			&emitter.transform.translate.x,
-			0.01f,
-			-100.0f,
-			100.0f
-		);
-
-		// Particle追加
-		if (ImGui::Button("Add Particle")) {
-
-			particleSystem.Emit(emitter);
-		}
-
 		// 色を編集する
 		ImGui::ColorEdit4("Color", &materialData->color.x);
 		const char* blendModeNames[] = {
@@ -2628,16 +2800,56 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// どちらのTextureを使うかのフラグ
 		ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-		// ライトの色
+		// -----------------
+		// DirectionalLight
+		// -----------------
+
+		// 色
 		ImGui::ColorEdit4("Light Color", &directionalLightData->color.x);
-		// ライトの向き
+		// 向き
 		if (ImGui::DragFloat3("Light Direction",&directionalLightData->direction.x,0.01f)) {
 			directionalLightData->direction = Normalize(directionalLightData->direction);
 		}
-		// ライトの強さ
+		// 強さ
+		ImGui::DragFloat("DirectionalLight Intensity", &directionalLightIntensity, 0.01f, 0.0f, 10.0f);
+		// 鏡面反射の鋭さ
 		ImGui::DragFloat("Shininess", &materialData->shininess, 1.0f, 1.0f, 256.0f);
+		// On / Off
+		ImGui::Checkbox("DirectionalLight", &useDirectionalLight);
+
+		// -----------------
+		// PointLight
+		// -----------------
+		
+		// 色
+		ImGui::ColorEdit4("PointLight Color", &pointLightData->color.x);
+		// 位置
+		ImGui::DragFloat3("PointLight Position", &pointLightData->position.x, 0.01f, -10.0f, 10.0f);
+		// 強さ
+		ImGui::DragFloat("PointLight Intensity", &pointLightIntensity, 0.01f, 0.0f, 10.0f);
+		// 有効範囲
+		ImGui::DragFloat("PointLight Radius", &pointLightData->radius, 0.1f, 0.1f, 100.0f);
+		// 減衰率
+		ImGui::DragFloat("PointLight Decay", &pointLightData->decay, 0.01f, 0.1f, 10.0f);
+		// On / Off
+		ImGui::Checkbox("PointLight", &usePointLight);
 
 		ImGui::End();
+
+		// Light ON / OFFを反映
+		if (useDirectionalLight) {
+			directionalLightData->intensity = directionalLightIntensity;
+		}
+		else {
+			directionalLightData->intensity = 0.0f;
+		}
+
+		if (usePointLight) {
+			pointLightData->intensity = pointLightIntensity;
+		}
+		else {
+			pointLightData->intensity = 0.0f;
+		}
 
 		// ImGuiの描画を行う
 		ImGui::Render();
@@ -2744,6 +2956,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// Cameraの位置を設定
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 
+			// 点光源を設定
+			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
+
 			// 使うTextureを設定
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
@@ -2752,6 +2967,57 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// フラグが変わってもspriteを変えない
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+
+			// ------------------------------------
+			// 2個目 : OBJ
+			// ------------------------------------
+
+			commandList->IASetVertexBuffers(
+				0,
+				1,
+				&vertexBufferView2
+			);
+
+			commandList->SetGraphicsRootConstantBufferView(
+				0,
+				materialResource->GetGPUVirtualAddress()
+			);
+
+			commandList->SetGraphicsRootConstantBufferView(
+				1,
+				wvpResource2->GetGPUVirtualAddress()
+			);
+
+			// 2個目OBJのmtl Texture
+			commandList->SetGraphicsRootDescriptorTable(
+				2,
+				textureSrvHandleGPU3
+			);
+
+			// Lightは共有
+			commandList->SetGraphicsRootConstantBufferView(
+				3,
+				directionalLightResource->GetGPUVirtualAddress()
+			);
+
+			commandList->SetGraphicsRootConstantBufferView(
+				4,
+				cameraResource->GetGPUVirtualAddress()
+			);
+
+			commandList->SetGraphicsRootConstantBufferView(
+				5,
+				pointLightResource->GetGPUVirtualAddress()
+			);
+
+			commandList->DrawInstanced(
+				static_cast<UINT>(
+					modelData2.vertices.size()
+					),
+				1,
+				0,
+				0
+			);
 
 			// -----------------
 			// Particle描画
@@ -2915,10 +3181,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	intermediateResource->Release();
 	intermediateResource2->Release();
+	intermediateResource3->Release();
 	wvpResource->Release();
 	vertexResource->Release();
+	wvpResource2->Release();
+	vertexResource2->Release();
 	textureResource->Release();
 	textureResource2->Release();
+	textureResource3->Release();
 
 	// Particle関連の解放
 	particleVertexResource->Release();
@@ -2951,6 +3221,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	transformationMatrixResourceSprite->Release();
 	materialResourceSprite->Release();
 	directionalLightResource->Release();
+	pointLightResource->Release();
 	cameraResource->Release();
 
 	CloseHandle(fenceEvent);
