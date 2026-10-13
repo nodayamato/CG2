@@ -65,6 +65,22 @@ struct DirectionalLight
 	float intensity;
 };
 
+// 点光源
+struct PointLight {
+	// ライトの色
+	Vector4 color;
+	// ライトの位置
+	Vector3 position;
+	// ライトの明るさ
+	float intensity;
+	// ライトが届く最大距離
+	float radius;
+	// 減衰率
+	float decay;
+	// 16byte境界合わせ
+	float padding[2];
+};
+
 // ワールド行列、ビュー行列、射影行列をまとめた構造体
 struct TransformationMatrix {
 	Matrix4x4 WVP;
