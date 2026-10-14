@@ -51,6 +51,29 @@ struct PointLight
 
 ConstantBuffer<PointLight> gPointLight : register(b3);
 
+// スポットライト
+struct SpotLight
+{
+    // ライトの色
+    float32_t4 color;
+    // ライトの位置
+    float32_t3 position;
+    // ライトの明るさ
+    float intensity;
+    // スポットライトの方向
+    float32_t3 direction;
+    // ライトが届く最大距離
+    float distance;
+    // 減衰率
+    float decay;
+    // スポットライトの余弦
+    float cosAngle;
+    // スポットライトの減衰開始角度の余弦
+    float cosFalloffStart;
+};
+
+ConstantBuffer<SpotLight> gSpotLight : register(b4);
+
 // Texture
 Texture2D<float32_t4> gTexture : register(t0);
 
@@ -135,16 +158,47 @@ PixelShaderOutput main(VertexShaderOutput input)
         float NDotHPoint = dot(normal, halfVectorPoint);
         // 鏡面反射強度
         float specularPowPoint = pow(saturate(NDotHPoint), gMaterial.shininess);
-        // PointLight 拡散反射
+        // 拡散反射
         float32_t3 diffusePointLight = gMaterial.color.rgb * textureColor.rgb * gPointLight.color.rgb * cosPoint * factor * gPointLight.intensity;
-        // PointLight 鏡面反射
+        // 鏡面反射
         float32_t3 specularPointLight = gPointLight.color.rgb * gPointLight.intensity * factor * specularPowPoint * float32_t3(1.0f, 1.0f, 1.0f);
+        
+        // ----------------------
+        // SpotLight
+        // ----------------------
+        
+        // 物体表面からSpotLightへの向き
+        float32_t3 spotLightDirectionOnSurface = normalize(input.worldPosition - gSpotLight.position);
+        // 物体表面からSpotLightへの向き(Diffuse / Specular計算用)
+        float32_t3 toSpotLight = normalize(gSpotLight.position - input.worldPosition);
+        // SpotLightまでの距離
+        float32_t spotDistance = length(gSpotLight.position - input.worldPosition);
+        // 減衰率
+        float32_t attenuationFactor = pow(saturate(-spotDistance / gSpotLight.distance + 1.0f), gSpotLight.decay);
+        // 物体表面からSpotLightへの向きとSpotLightの方向の内積
+        float32_t cosAngle = dot(spotLightDirectionOnSurface, gSpotLight.direction);
+        // スポットライトの角度による減衰
+        float32_t falloffFactor = saturate((cosAngle - gSpotLight.cosAngle) / (gSpotLight.cosFalloffStart - gSpotLight.cosAngle));
+        // N・L
+        float NdotLSpot = dot(normal, toSpotLight);
+        // Half Lambert
+        float cosSpot = saturate(NdotLSpot);
+        // HalfVector
+        float32_t3 halfVectorSpot = normalize(toSpotLight + toEye);
+        // N・H
+        float NDotHSpot = dot(normal, halfVectorSpot);
+        // 鏡面反射強度
+        float specularPowSpot = pow(saturate(NDotHSpot), gMaterial.shininess);
+        // 拡散反射
+        float32_t3 diffuseSpotLight = gMaterial.color.rgb * textureColor.rgb * gSpotLight.color.rgb * gSpotLight.intensity * attenuationFactor * falloffFactor * cosSpot;
+        // 鏡面反射
+        float32_t3 specularSpotLight = gSpotLight.color.rgb * gSpotLight.intensity * attenuationFactor * falloffFactor * specularPowSpot * float32_t3(1.0f, 1.0f, 1.0f);
         
         // ----------------------
         // 全部の光源の合計
         // ----------------------
 
-        output.color.rgb = diffuseDirectionalLight + specularDirectionalLight + diffusePointLight + specularPointLight;
+        output.color.rgb = diffuseDirectionalLight + specularDirectionalLight + diffusePointLight + specularPointLight + diffuseSpotLight + specularSpotLight;
         output.color.a = gMaterial.color.a * textureColor.a;
     }
     else
