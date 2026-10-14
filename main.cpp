@@ -1106,7 +1106,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// RootParameter作成
-	D3D12_ROOT_PARAMETER rootParameters[6] = {};
+	D3D12_ROOT_PARAMETER rootParameters[7] = {};
 	// CBVを設定
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	// PixelShaderを設定
@@ -1167,6 +1167,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	// HLSLの register(b3)
 	rootParameters[5].Descriptor.ShaderRegister = 3;
+
+	// SpotLight用CBV
+	rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	// HLSL側の register(b4)
+	rootParameters[6].Descriptor.ShaderRegister = 4;
 
 	// シリアライズ
 	ID3DBlob* signatureBlob = nullptr;
@@ -2268,6 +2274,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	pointLightData->padding[1] = 0.0f;
 
 	// ------------------------------
+	// スポットライト用リソースを作る
+	// ------------------------------
+
+	// スポットライト用ConstantBufferを作成
+	ID3D12Resource* spotLightResource = CreateBufferResource(device, sizeof(SpotLight));
+	// CPUから書き込むためのポインタ
+	SpotLight* spotLightData = nullptr;
+	// ResourceをMapして書き込み先を取得
+	spotLightResource->Map(0, nullptr, reinterpret_cast<void**>(&spotLightData));
+	// 色
+	spotLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	// 位置
+	spotLightData->position = { 2.0f, 1.25f, 0.0f };
+	// 明るさ
+	spotLightData->intensity = 4.0f;
+	// 向き
+	spotLightData->direction = { -1.0f, -1.0f, 0.0f };
+	// 最大距離
+	spotLightData->distance = 7.0f;
+	// 減衰率
+	spotLightData->decay = 2.0f;
+	// 角度
+	spotLightData->cosAngle = std::cos(std::numbers::pi_v<float> / 3.0f);
+	// 角度の減衰が始まる角度
+	spotLightData->cosFalloffStart = std::cos(std::numbers::pi_v<float> / 6.0f);
+	// 角度の減衰が始まる角度
+	float spotLightAngle = 60.0f;
+	float spotLightFalloffStartAngle = 30.0f;
+	// padding
+	spotLightData->padding[0] = 0.0f;
+	spotLightData->padding[1] = 0.0f;
+
+	// ------------------------------
 	// Light ON / OFF
 	// ------------------------------
 
@@ -2834,6 +2873,33 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// On / Off
 		ImGui::Checkbox("PointLight", &usePointLight);
 
+		// -----------------
+		// SpotLight
+		// -----------------
+
+		// 色
+		ImGui::ColorEdit4("SpotLight Color", &spotLightData->color.x);
+		// 位置
+		ImGui::DragFloat3("SpotLight Position", &spotLightData->position.x, 0.01f, -20.0f, 20.0f);
+		// 向き
+		if (ImGui::DragFloat3("SpotLight Direction", &spotLightData->direction.x, 0.01f)) {
+			spotLightData->direction = Normalize(spotLightData->direction);
+		}
+		// 強さ
+		ImGui::DragFloat("SpotLight Intensity", &spotLightData->intensity, 0.01f, 0.0f, 10.0f);
+		// 最大距離
+		ImGui::DragFloat("SpotLight Distance", &spotLightData->distance, 0.1f, 0.1f, 100.0f);
+		// 減衰率
+		ImGui::DragFloat("SpotLight Decay", &spotLightData->decay, 0.01f, 0.1f, 10.0f);
+		// 角度
+		ImGui::DragFloat("SpotLight Angle", &spotLightAngle, 1.0f, 1.0f, 179.0f);
+		// 減衰開始角度の余弦
+		ImGui::DragFloat("SpotLight FalloffStart", &spotLightFalloffStartAngle, 1.0f, 0.0f, spotLightAngle - 0.1f);
+
+		// Degree → cos
+		spotLightData->cosAngle = std::cos(spotLightAngle * std::numbers::pi_v<float> / 180.0f);
+		spotLightData->cosFalloffStart = std::cos(spotLightFalloffStartAngle * std::numbers::pi_v<float> / 180.0f);
+
 		ImGui::End();
 
 		// Light ON / OFFを反映
@@ -2959,6 +3025,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 点光源を設定
 			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
 
+			// スポットライトを設定
+			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
+
 			// 使うTextureを設定
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
@@ -2972,52 +3041,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 2個目 : OBJ
 			// ------------------------------------
 
-			commandList->IASetVertexBuffers(
-				0,
-				1,
-				&vertexBufferView2
-			);
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferView2);
 
-			commandList->SetGraphicsRootConstantBufferView(
-				0,
-				materialResource->GetGPUVirtualAddress()
-			);
+			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 
-			commandList->SetGraphicsRootConstantBufferView(
-				1,
-				wvpResource2->GetGPUVirtualAddress()
-			);
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource2->GetGPUVirtualAddress());
 
 			// 2個目OBJのmtl Texture
-			commandList->SetGraphicsRootDescriptorTable(
-				2,
-				textureSrvHandleGPU3
-			);
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU3);
 
 			// Lightは共有
-			commandList->SetGraphicsRootConstantBufferView(
-				3,
-				directionalLightResource->GetGPUVirtualAddress()
-			);
+			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
 
-			commandList->SetGraphicsRootConstantBufferView(
-				4,
-				cameraResource->GetGPUVirtualAddress()
-			);
+			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 
-			commandList->SetGraphicsRootConstantBufferView(
-				5,
-				pointLightResource->GetGPUVirtualAddress()
-			);
+			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
 
-			commandList->DrawInstanced(
-				static_cast<UINT>(
-					modelData2.vertices.size()
-					),
-				1,
-				0,
-				0
-			);
+			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
+
+			commandList->DrawInstanced(static_cast<UINT>(modelData2.vertices.size()), 1, 0, 0);
 
 			// -----------------
 			// Particle描画
@@ -3222,6 +3264,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResourceSprite->Release();
 	directionalLightResource->Release();
 	pointLightResource->Release();
+	spotLightResource->Release();
 	cameraResource->Release();
 
 	CloseHandle(fenceEvent);
