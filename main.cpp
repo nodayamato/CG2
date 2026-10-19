@@ -13,6 +13,7 @@
 #include "DebugCamera.h"
 #include "BlendMode.h"
 #include "ParticleSystem.h"
+#include "WinApp.h"
 
 // 標準ライブラリ
 #include <cstdint>
@@ -58,42 +59,7 @@
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
 
-// ImGuiのWndProcHandlerを宣言する
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
-	HWND hWnd,
-	UINT msg,
-	WPARAM wParam,
-	LPARAM lParam
-);
-
 #endif
-
-// ウィンドウプロシージャ
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg,
-	WPARAM wparam, LPARAM lparam) {
-
-#ifdef USE_IMGUI
-
-	// ImGuiのWndProcHandlerにメッセージを渡す
-	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
-		return true;
-	}
-
-#endif
-
-	// メッセージに応じてゲーム固有の処理を行う
-	switch (msg) {
-
-		// ウィンドウが破棄された
-	case WM_DESTROY:
-		// OSに対して、アプリの終了を伝える
-		PostQuitMessage(0);
-		return 0;
-	}
-
-	// 標準のメッセージ処理を行う
-	return DefWindowProc(hwnd, msg, wparam, lparam);
-}
 
 /// <summary>
 /// クラッシュダンプを出力する
@@ -623,42 +589,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ウィンドウ関連の初期化
 	// ------------------------------
 
-	// クライアント領域のサイズ
-	const int32_t kClientWidth = 1280;
-	const int32_t kClientHeight = 720;
-	// ウィンドウサイズを表す構造体にクライアント領域を入れる
-	RECT wrc = { 0, 0, kClientWidth, kClientHeight };
-	// クライアント領域を元に実際のサイズにwrcを変更してもらう
-	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
-
-	WNDCLASS wc{};
-	// ウィンドウプロシージャ
-	wc.lpfnWndProc = WindowProc;
-	// ウィンドウクラス名
-	wc.lpszClassName = L"CG2WindowClass";
-	// インスタンスハンドル
-	wc.hInstance = GetModuleHandle(nullptr);
-	// カーソル
-	wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-	// ウィンドウクラスを登録する
-	RegisterClass(&wc);
-
-	// ウィンドウの生成
-	HWND hwnd = CreateWindow(
-		wc.lpszClassName,          // 利用するクラス名
-		L"CG2",                    // タイトル
-		WS_OVERLAPPEDWINDOW,       // ウィンドウスタイル
-		CW_USEDEFAULT,             // 表示位置X
-		CW_USEDEFAULT,             // 表示位置Y
-		wrc.right - wrc.left,      // 幅
-		wrc.bottom - wrc.top,      // 高さ
-		nullptr,                   // 親ウィンドウ
-		nullptr,                   // メニュー
-		wc.hInstance,              // インスタンスハンドル
-		nullptr                    // オプション
-	);
-	// ウィンドウを表示する
-	ShowWindow(hwnd, SW_SHOW);
+	// WinAppクラスのインスタンスを生成
+	WinApp winApp;
+	// ウィンドウ初期化
+	winApp.Initialize();
+	// ウィンドウハンドルを取得
+	HWND hwnd = winApp.GetHwnd();
 
 #ifdef _DEBUG
 	// デバッグレイヤーを有効化する
@@ -785,7 +721,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Log(logStream, "Complete create D3D12Device!!!\n");
 
 	// 入力の初期化
-	input->Initialize(GetModuleHandle(nullptr), hwnd);
+	input->Initialize(winApp.GetHInstance(), winApp.GetHwnd());
 
 #ifdef _DEBUG
 	// デバッグレイヤーの情報を取得する
@@ -890,9 +826,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IDXGISwapChain4* swapChain = nullptr;
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
 	// 画面の幅。ウィンドウのクライアント領域と同じものにしておく
-	swapChainDesc.Width = kClientWidth;
+	swapChainDesc.Width = WinApp::kClientWidth;
 	// 画面の高さ。ウィンドウのクライアント領域と同じものにしておく
-	swapChainDesc.Height = kClientHeight;
+	swapChainDesc.Height = WinApp::kClientHeight;
 	// 色の形式
 	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	// マルチサンプルしない
@@ -927,7 +863,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
 
 	// DepthStencilTextureをウィンドウのサイズで作成
-	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
+	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, WinApp::kClientWidth, WinApp::kClientHeight);
 
 	// DSV用のディスクリプタヒープを生成する
 	ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
@@ -2372,8 +2308,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_VIEWPORT viewport{};
 
 	// クライアント領域のサイズと一緒にして画面全体に表示
-	viewport.Width = static_cast<float>(kClientWidth);
-	viewport.Height = static_cast<float>(kClientHeight);
+	viewport.Width = static_cast<float>(WinApp::kClientWidth);
+	viewport.Height = static_cast<float>(WinApp::kClientHeight);
 	viewport.TopLeftX = 0.0f;
 	viewport.TopLeftY = 0.0f;
 	viewport.MinDepth = 0.0f;
@@ -2384,9 +2320,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// 基本的にビューポートと同じ矩形が構成されるようにする
 	scissorRect.left = 0;
-	scissorRect.right = kClientWidth;
+	scissorRect.right = WinApp::kClientWidth;
 	scissorRect.top = 0;
-	scissorRect.bottom = kClientHeight;
+	scissorRect.bottom = WinApp::kClientHeight;
 
 	// ------------------------------
 	// Textureの読み込み
@@ -2565,9 +2501,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ゲームループ
 	// ------------------------------
 
-	MSG msg{};
 	// ウィンドウのXボタンが押されるまでループする
-	while (msg.message != WM_QUIT) {
+	while (!winApp.IsEndRequested()) {
 
 #ifdef USE_IMGUI
 
@@ -2791,7 +2726,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// View
 		Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
 		// Projection
-		Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+		Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(WinApp::kClientWidth), float(WinApp::kClientHeight), 0.0f, 100.0f);
 		// WVP
 		Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 		// Sprite用WVP行列をGPUへ渡す
@@ -2939,9 +2874,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 		// Windowにメッセージが来ていたら最優先で処理させる
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
+		if (winApp.ProcessMessage()) {
+			// メッセージがある場合はWinApp側で処理
 		}
 		else {
 			// これから書き込むバックバッファのインデックスを取得
@@ -3288,7 +3222,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	debugController->Release();
 #endif
 
-	CloseWindow(hwnd);
+	// ウィンドウの終了処理
+	winApp.Finalize();
 
 	// リソースリークチェック
 	IDXGIDebug1* debug = nullptr;
