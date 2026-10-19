@@ -4,7 +4,7 @@
 /// Vector3を行列で変換する
 /// 平行移動は使用しない
 /// </summary>
-static Vector3 TransformNormal(
+Vector3 DebugCamera::TransformNormal(
 	const Vector3& vector,
 	const Matrix4x4& matrix)
 {

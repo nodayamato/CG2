@@ -1,7 +1,10 @@
 #pragma warning(push)
 // C4023の警告を無効化する
 #pragma warning(disable:4023)
+
 #include <Windows.h>
+
+// 自作ヘッダー
 #include "ConvertString.h"
 #include "Math.h"
 #include "ModelData.h"
@@ -10,35 +13,34 @@
 #include "DebugCamera.h"
 #include "BlendMode.h"
 #include "ParticleSystem.h"
-#include <cstring>
-// 乱数生成器を扱うライブラリ
-#include <random>
-// 標準入出力を扱うライブラリ
+
+// 標準ライブラリ
 #include <cstdint>
-// 文字列を扱うライブラリ
 #include <string>
-// ファイルやディレクトリに関する操作を行うライブラリ
 #include <filesystem>
-// ファイルに書いたり読むためのライブラリ
 #include <fstream>
-// 時間に関するライブラリ
 #include <chrono>
+#include <cassert>
+#include <vector>
+#include <numbers>
+#include <format>
+#include <ostream>
+
+// DirectX12関連
 #include <d3d12.h>
 #include <dxgi1_6.h>
-#include <wrl.h>
-#include <cassert>
-// デバッグ用のライブラリ
 #include <dbghelp.h>
 #include <strsafe.h>
 #include <dxgidebug.h>
 #include <dxcapi.h>
-#include <vector>
-#include <numbers>
-#include <xaudio2.h>
+
+// DirectInput
 #define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
+
 #pragma warning(pop)
 
+// ライブラリのリンク設定
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "Dbghelp.lib")

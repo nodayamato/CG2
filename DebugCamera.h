@@ -39,6 +39,11 @@ public:
 	}
 
 private:
+	// ベクトルを行列で変換する静的メンバ関数
+	static Vector3 TransformNormal(
+		const Vector3& vector,
+		const Matrix4x4& matrix);
+
 	// 累積回転行列
 	Matrix4x4 matRot_{};
 
