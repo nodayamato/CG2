@@ -609,7 +609,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Audio audio;
 
 	// 入力管理
-	Input input;
+	Input* input = new Input();
 
 	// デバッグカメラ
 	DebugCamera debugCamera;
@@ -783,7 +783,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Log(logStream, "Complete create D3D12Device!!!\n");
 
 	// 入力の初期化
-	input.Initialize(GetModuleHandle(nullptr), hwnd);
+	input->Initialize(GetModuleHandle(nullptr), hwnd);
 
 #ifdef _DEBUG
 	// デバッグレイヤーの情報を取得する
@@ -2580,9 +2580,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 入力更新
 		// ------------------------------
 
-		input.Update();
+		input->Update();
 
-		if (input.PushKey(DIK_0))
+		if (input->PushKey(DIK_0))
 		{
 			OutputDebugStringA("Hit 0\n");
 		}
@@ -2602,7 +2602,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// ImGui操作中はCameraを動かさない
 		if (!isImGuiUsingMouse) {
-			debugCamera.Update(&input);
+			debugCamera.Update(input);
 		}
 
 		// Camera位置をGPUへ送る
@@ -3298,6 +3298,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
 		debug->Release();
 	}
+
+	// Inputクラスのインスタンスを解放
+	delete input;
+	input = nullptr;
 
 	// Audioの終了
 	audio.Finalize();
