@@ -1,8 +1,9 @@
 #pragma once
 #include "MaterialData.h"
+#include "Math.h"
+
 #include <vector>
 #include <string>
-#include "Math.h"
 
 /// <summary>
 /// モデルデータ

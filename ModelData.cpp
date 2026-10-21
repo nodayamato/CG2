@@ -1,10 +1,14 @@
 #include "ModelData.h"
+
 #include <cassert>
 #include <cstdint>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <vector>
+
+// Assimp
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 /// <summary>
 /// OBJファイルを読み込む
@@ -12,195 +16,202 @@
 /// <param name="directoryPath">OBJファイルがあるフォルダ</param>
 /// <param name="filename">OBJファイル名</param>
 /// <returns>読み込んだモデルデータ</returns>
-ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename)
-{
-	// 読み込んだモデルデータを格納する
+ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
+
+	// ------------------------------
+	// 読み込んだモデルデータ
+	// ------------------------------
 	ModelData modelData;
 
-	// OBJファイル内の頂点座標を格納する
-	std::vector<Vector4> positions;
+	// ------------------------------
+	// Assimpを使ってファイルを読み込む
+	// ------------------------------
+	Assimp::Importer importer;
 
-	// OBJファイル内の法線を格納する
-	std::vector<Vector3> normals;
+	std::string filePath =
+		directoryPath + "/" + filename;
 
-	// OBJファイル内のテクスチャ座標を格納する
-	std::vector<Vector2> texcoords;
+	const aiScene* scene =
+		importer.ReadFile(
+			filePath.c_str(),
 
-	// ファイルから読み込んだ1行を格納する
-	std::string line;
+			// 三角形の頂点順を反転する
+			aiProcess_FlipWindingOrder |
 
-	// OBJファイルを開く
-	std::ifstream file(directoryPath + "/" + filename);
+			// UVのV方向を反転する
+			aiProcess_FlipUVs |
 
-	// ファイルが開けなかった場合は停止する
-	assert(file.is_open());
+			// 四角形などを三角形に変換する
+			aiProcess_Triangulate
+		);
 
-	// ファイルを最後まで1行ずつ読み込む
-	while (std::getline(file, line))
-	{
-		// 行の先頭にある識別子を格納する
-		std::string identifier;
+	// ------------------------------
+	// 読み込み確認
+	// ------------------------------
+	assert(scene != nullptr);
 
-		// 読み込んだ1行を解析するためのストリーム
-		std::istringstream s(line);
+	// Meshが存在することを確認
+	assert(scene->HasMeshes());
 
-		// 行の先頭の識別子を読み込む
-		s >> identifier;
+	// =====================================
+	// Meshを解析する
+	// =====================================
+
+	for (
+		uint32_t meshIndex = 0;
+		meshIndex < scene->mNumMeshes;
+		++meshIndex
+		) {
 
 		// ------------------------------
-		// 頂点座標を読み込む
+		// Meshを取得
 		// ------------------------------
-		if (identifier == "v")
-		{
-			Vector4 position{};
+		aiMesh* mesh = scene->mMeshes[meshIndex];
 
-			// X、Y、Z座標を読み込む
-			s >> position.x
-				>> position.y
-				>> position.z;
+		// 法線が存在することを確認
+		assert(mesh->HasNormals());
 
-			// OBJの右手座標系から
-			// DirectXで使用する左手座標系へ変換する
-			position.x *= -1.0f;
+		// UVが存在することを確認
+		assert(mesh->HasTextureCoords(0));
 
-			// 同次座標のWを1にする
-			position.w = 1.0f;
+		// =================================
+		// Faceを解析する
+		// =================================
 
-			// 頂点座標一覧へ追加する
-			positions.push_back(position);
-		}
-		// ------------------------------
-		// テクスチャ座標を読み込む
-		// ------------------------------
-		else if (identifier == "vt")
-		{
-			Vector2 texcoord{};
+		for (
+			uint32_t faceIndex = 0;
+			faceIndex < mesh->mNumFaces;
+			++faceIndex
+			) {
 
-			// U、V座標を読み込む
-			s >> texcoord.x
-				>> texcoord.y;
+			// ------------------------------
+			// Faceを取得
+			// ------------------------------
+			aiFace& face = mesh->mFaces[faceIndex];
 
-			// OBJとDirectXではV方向が逆なので反転する
-			texcoord.y = 1.0f - texcoord.y;
+			// Triangulateを使っているので3頂点
+			assert(face.mNumIndices == 3);
 
-			// テクスチャ座標一覧へ追加する
-			texcoords.push_back(texcoord);
-		}
-		// ------------------------------
-		// 法線を読み込む
-		// ------------------------------
-		else if (identifier == "vn")
-		{
-			Vector3 normal{};
+			// =================================
+			// Vertexを解析する
+			// =================================
 
-			// 法線のX、Y、Zを読み込む
-			s >> normal.x
-				>> normal.y
-				>> normal.z;
+			for (
+				uint32_t element = 0;
+				element < face.mNumIndices;
+				++element
+				) {
 
-			// OBJの右手座標系から
-			// DirectXで使用する左手座標系へ変換する
-			normal.x *= -1.0f;
+				// ------------------------------
+				// Faceから頂点Indexを取得
+				// ------------------------------
+				uint32_t vertexIndex = face.mIndices[element];
 
-			// 法線一覧へ追加する
-			normals.push_back(normal);
-		}
-		// ------------------------------
-		// マテリアルテンプレートファイルを読み込む
-		// ------------------------------
-		else if (identifier == "mtllib")
-		{
-			std::string materialFilename;
+				// ------------------------------
+				// Assimpから頂点情報を取得
+				// ------------------------------
 
-			s >> materialFilename;
+				aiVector3D& position = mesh->mVertices[vertexIndex];
 
-			modelData.material =
-				LoadMaterialTemplateFile(
-					directoryPath,
-					materialFilename);
-		}
-		// ------------------------------
-		// 面情報を読み込む
-		// ------------------------------
-		else if (identifier == "f")
-		{
-			// 三角形の3頂点を一時的に保存する
-			VertexData triangle[3]{};
+				aiVector3D& normal = mesh->mNormals[vertexIndex];
 
-			// OBJの面は三角形限定として3頂点読み込む
-			for (int32_t faceVertex = 0;
-				faceVertex < 3;
-				++faceVertex)
-			{
-				// 「位置Index/UVIndex/法線Index」を格納する
-				std::string vertexDefinition;
+				aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
 
-				// 1頂点分の定義を読み込む
-				s >> vertexDefinition;
+				// ------------------------------
+				// VertexDataを作る
+				// ------------------------------
+				VertexData vertex{};
 
-				// スラッシュ区切りで解析するためのストリーム
-				std::istringstream v(vertexDefinition);
-
-				// 0: 頂点座標
-				// 1: テクスチャ座標
-				// 2: 法線
-				uint32_t elementIndices[3]{};
-
-				// 位置、UV、法線の3つのIndexを読み込む
-				for (int32_t element = 0;
-					element < 3;
-					++element)
-				{
-					std::string index;
-
-					// 「/」を区切り文字としてIndexを読み込む
-					std::getline(
-						v,
-						index,
-						'/');
-
-					// 文字列を数値へ変換する
-					elementIndices[element] =
-						static_cast<uint32_t>(
-							std::stoi(index));
-				}
-
-				// OBJのIndexは1から始まるため、
-				// 配列アクセス時には1を引く
-				Vector4 position =
-					positions[
-						elementIndices[0] - 1];
-
-				Vector2 texcoord =
-					texcoords[
-						elementIndices[1] - 1];
-
-				Vector3 normal =
-					normals[
-						elementIndices[2] - 1];
-
-				// 1頂点分のデータを作成する
-				triangle[faceVertex] = {
-					position,
-					texcoord,
-					normal
+				// 頂点座標
+				vertex.position = {
+					position.x,
+					position.y,
+					position.z,
+					1.0f
 				};
+
+				// 法線
+				vertex.normal = {
+					normal.x,
+					normal.y,
+					normal.z
+				};
+
+				// UV
+				vertex.texcoord = {
+					texcoord.x,
+					texcoord.y
+				};
+
+				// ------------------------------
+				// 右手座標系 → 左手座標系
+				// ------------------------------
+
+				vertex.position.x *= -1.0f;
+
+				vertex.normal.x *= -1.0f;
+
+				// ------------------------------
+				// ModelDataへ追加
+				// ------------------------------
+				modelData.vertices.push_back(
+					vertex
+				);
 			}
-
-			// 右手系から左手系へ変換すると
-			// 三角形の表裏が逆になるため、
-			// 頂点を逆順に登録する
-			modelData.vertices.push_back(
-				triangle[2]);
-
-			modelData.vertices.push_back(
-				triangle[1]);
-
-			modelData.vertices.push_back(
-				triangle[0]);
 		}
 	}
 
-	// 作成したモデルデータを返す
+	// =====================================
+	// Materialを解析する
+	// =====================================
+
+	for (
+		uint32_t materialIndex = 0;
+		materialIndex < scene->mNumMaterials;
+		++materialIndex
+		) {
+
+		// ------------------------------
+		// Material取得
+		// ------------------------------
+		aiMaterial* material = scene->mMaterials[materialIndex];
+
+		// ------------------------------
+		// DiffuseTextureがあるか確認
+		// ------------------------------
+		if (
+			material->GetTextureCount(
+				aiTextureType_DIFFUSE
+			) != 0
+			) {
+
+			// Textureパス
+			aiString textureFilePath;
+
+			// 0番目のDiffuseTextureを取得
+			material->GetTexture(
+				aiTextureType_DIFFUSE,
+				0,
+				&textureFilePath
+			);
+
+			// ------------------------------
+			// Textureパスを保存
+			// ------------------------------
+			modelData.material.textureFilePath =
+				directoryPath +
+				"/" +
+				textureFilePath.C_Str();
+		}
+	}
+
+	// ------------------------------
+	// 頂点が読み込めているか確認
+	// ------------------------------
+	assert(!modelData.vertices.empty());
+
+	// ------------------------------
+	// 完成したModelDataを返す
+	// ------------------------------
 	return modelData;
 }
