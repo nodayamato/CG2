@@ -2022,13 +2022,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	};
 
 	// ------------------------------
-	// 2個目のOBJモデルを読み込む
+	// 2個目のモデルを読み込む
 	// ------------------------------
 
 	ModelData modelData2 =
-		LoadObjFile(
-			"resources",
-			"terrain.obj"
+		LoadModelFile(
+			"resources/plane",
+			"plane.gltf"
 		);
 
 	assert(!modelData2.vertices.empty());
@@ -2578,7 +2578,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 2個目のモデル行列更新
 		// ------------------------------
 
-		Matrix4x4 worldMatrix2 = MakeAffineMatrix(transform2.scale, transform2.rotate, transform2.translate);
+		// 自分で設定しているTransform
+		Matrix4x4 modelWorldMatrix2 = MakeAffineMatrix(transform2.scale, transform2.rotate, transform2.translate);
+		// RootNodeのTransformを適用
+		Matrix4x4 worldMatrix2 = Multiply(modelData2.rootNode.localMatrix, modelWorldMatrix2);
 		// WVP
 		Matrix4x4 worldViewProjectionMatrix2 = Multiply(worldMatrix2, Multiply(viewMatrix, projectionMatrix));
 		// 逆行列

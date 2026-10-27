@@ -11,12 +11,83 @@
 #include <assimp/postprocess.h>
 
 /// <summary>
-/// OBJファイルを読み込む
+/// AssimpのNodeを解析する
 /// </summary>
-/// <param name="directoryPath">OBJファイルがあるフォルダ</param>
-/// <param name="filename">OBJファイル名</param>
+/// <param name="node">解析するNode</param>
+/// <returns>解析されたNode</returns>
+Node ReadNode(aiNode* node) {
+
+	Node result{};
+
+	// ------------------------------
+	// LocalMatrixを取得
+	// ------------------------------
+	aiMatrix4x4 aiLocalMatrix = node->mTransformation;
+
+	// Assimpは列ベクトル形式なので
+	// DirectX用の行ベクトル形式へ転置
+	aiLocalMatrix.Transpose();
+
+	// ------------------------------
+	// Matrix4x4へ変換
+	// ------------------------------
+	result.localMatrix.m[0][0] = aiLocalMatrix.a1;
+	result.localMatrix.m[0][1] = aiLocalMatrix.a2;
+	result.localMatrix.m[0][2] = aiLocalMatrix.a3;
+	result.localMatrix.m[0][3] = aiLocalMatrix.a4;
+
+	result.localMatrix.m[1][0] = aiLocalMatrix.b1;
+	result.localMatrix.m[1][1] = aiLocalMatrix.b2;
+	result.localMatrix.m[1][2] = aiLocalMatrix.b3;
+	result.localMatrix.m[1][3] = aiLocalMatrix.b4;
+
+	result.localMatrix.m[2][0] = aiLocalMatrix.c1;
+	result.localMatrix.m[2][1] = aiLocalMatrix.c2;
+	result.localMatrix.m[2][2] = aiLocalMatrix.c3;
+	result.localMatrix.m[2][3] = aiLocalMatrix.c4;
+
+	result.localMatrix.m[3][0] = aiLocalMatrix.d1;
+	result.localMatrix.m[3][1] = aiLocalMatrix.d2;
+	result.localMatrix.m[3][2] = aiLocalMatrix.d3;
+	result.localMatrix.m[3][3] = aiLocalMatrix.d4;
+
+	// ------------------------------
+	// Node名
+	// ------------------------------
+	result.name = node->mName.C_Str();
+
+	// ------------------------------
+	// 子Nodeの数だけ確保
+	// ------------------------------
+	result.children.resize(
+		node->mNumChildren
+	);
+
+	// ------------------------------
+	// 子Nodeを再帰的に解析
+	// ------------------------------
+	for (
+		uint32_t childIndex = 0;
+		childIndex < node->mNumChildren;
+		++childIndex
+		) {
+
+		result.children[childIndex] =
+			ReadNode(
+				node->mChildren[childIndex]
+			);
+	}
+
+	return result;
+}
+
+/// <summary>
+/// モデルファイルを読み込む
+/// </summary>
+/// <param name="directoryPath">モデルファイルがあるフォルダ</param>
+/// <param name="filename">モデルファイル名</param>
 /// <returns>読み込んだモデルデータ</returns>
-ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
+ModelData LoadModelFile(const std::string& directoryPath, const std::string& filename) {
 
 	// ------------------------------
 	// 読み込んだモデルデータ
@@ -52,6 +123,14 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 
 	// Meshが存在することを確認
 	assert(scene->HasMeshes());
+
+	// ------------------------------
+	// RootNodeを解析
+	// ------------------------------
+	modelData.rootNode =
+		ReadNode(
+			scene->mRootNode
+		);
 
 	// =====================================
 	// Meshを解析する
