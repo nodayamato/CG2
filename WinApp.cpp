@@ -1,5 +1,8 @@
 #include "WinApp.h"
 #include <cassert>
+#include <timeapi.h>
+
+#pragma comment(lib, "winmm.lib")
 
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
@@ -17,6 +20,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(
 
 // ウィンドウ初期化
 void WinApp::Initialize() {
+
+    // Windowsタイマーの分解能を上げる
+    timeBeginPeriod(1);
 
     // インスタンスハンドルを取得
     hInstance_ = GetModuleHandle(nullptr);
@@ -120,6 +126,9 @@ void WinApp::Finalize() {
     );
 
     hInstance_ = nullptr;
+
+    // タイマー分解能の要求を元に戻す
+    timeEndPeriod(1);
 }
 
 // ウィンドウプロシージャ
