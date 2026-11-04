@@ -15,6 +15,9 @@
 #include "WinApp.h"
 #include "DirectXCommon.h"
 #include "Logger.h"
+#include "SpriteCommon.h"
+#include "Sprite.h"
+#include "TextureManager.h"
 #include "D3DResourceLeakChecker.h"
 #include <wrl.h>
 
@@ -766,91 +769,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	BlendMode blendMode = kBlendModeNormal;
 
 	// ------------------------------
-	// Sprite用頂点リソースを作る
-	// ------------------------------
-
-	// Sprite用の頂点リソースを作成
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResourceSpriteOwner = dxCommon.CreateBufferResource(sizeof(VertexData) * 4);
-	ID3D12Resource* vertexResourceSprite = vertexResourceSpriteOwner.Get();
-	// Sprite用頂点バッファビュー
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
-	// GPUアドレス
-	vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
-	// バッファサイズ
-	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 4;
-	// 1頂点サイズ
-	vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
-
-	// ------------------------------
-	// Sprite用IndexResourceを作る
-	// ------------------------------
-
-	// Sprite用IndexResourceを作成
-	auto indexResourceSpriteOwner = dxCommon.CreateBufferResource(sizeof(uint32_t) * 6);
-	ID3D12Resource* indexResourceSprite = indexResourceSpriteOwner.Get();
-
-	// Sprite用IndexBufferViewを作成
-	D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
-
-	// IndexResourceのGPUアドレスを設定
-	indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
-
-	// IndexBuffer全体のサイズ
-	indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
-
-	// Index1個の形式はuint32_t
-	indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
-
-	// ------------------------------
-	// Sprite用頂点データ
-	// ------------------------------
-
-	VertexData* vertexDataSprite = nullptr;
-
-	// 書き込み先取得
-	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
-
-	// 左下
-	vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f };
-	vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
-	vertexDataSprite[0].normal = { 0.0f, 0.0f, -1.0f };
-
-	// 左上
-	vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f };
-	vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
-	vertexDataSprite[1].normal = { 0.0f, 0.0f, -1.0f };
-
-	// 右下
-	vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f };
-	vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
-	vertexDataSprite[2].normal = { 0.0f, 0.0f, -1.0f };
-
-	// 右上
-	vertexDataSprite[3].position = { 640.0f, 0.0f, 0.0f, 1.0f };
-	vertexDataSprite[3].texcoord = { 1.0f, 0.0f };
-	vertexDataSprite[3].normal = { 0.0f, 0.0f, -1.0f };
-
-	// ------------------------------
-	// Sprite用Indexデータ
-	// ------------------------------
-
-	// IndexResourceの書き込み先
-	uint32_t* indexDataSprite = nullptr;
-
-	// CPUから書き込めるようにMapする
-	indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSprite));
-
-	// 1枚目の三角形
-	indexDataSprite[0] = 0;
-	indexDataSprite[1] = 1;
-	indexDataSprite[2] = 2;
-
-	// 2枚目の三角形
-	indexDataSprite[3] = 1;
-	indexDataSprite[4] = 3;
-	indexDataSprite[5] = 2;
-
-	// ------------------------------
 	// Particle用のModelData
 	// ------------------------------
 
@@ -1580,129 +1498,44 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float directionalLightIntensity = 1.0f;
 	float pointLightIntensity = 1.0f;
 
-	// --------------------------------
-	// Sprite用TransformationMatrix
-	// --------------------------------
-
-	// Sprite用TransformationMatrix
-	auto transformationMatrixResourceSpriteOwner = dxCommon.CreateBufferResource(256);
-	ID3D12Resource* transformationMatrixResourceSprite = transformationMatrixResourceSpriteOwner.Get();
-
-	// Sprite用MaterialResource
-	auto materialResourceSpriteOwner = dxCommon.CreateBufferResource(256);
-	ID3D12Resource* materialResourceSprite = materialResourceSpriteOwner.Get();
-
-	Material* materialDataSprite = nullptr;
-	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialDataSprite));
-
-	materialDataSprite->color = { 1.0f,1.0f,1.0f,1.0f };
-	materialDataSprite->enableLighting = false;
-	materialDataSprite->shininess = 32.0f;
-
-	// SpriteのUVも最初は変形しない
-	materialDataSprite->uvTransform = MakeIdentity4x4();
-
-	// Sprite用TransformationMatrixのデータを書き込むためのポインタ
-	TransformationMatrix* transformationMatrixDataSprite = nullptr;
-
-	// Map
-	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixDataSprite));
-
-	// 単位行列
-	transformationMatrixDataSprite->WVP = MakeIdentity4x4();
-	transformationMatrixDataSprite->World = MakeIdentity4x4();
-	transformationMatrixDataSprite->WorldInverseTranspose = MakeIdentity4x4();
-
-	// Sprite用Transform
-	Transform transformSprite{
-		{1.0f,1.0f,1.0f},
-		{0.0f,0.0f,0.0f},
-		{0.0f,0.0f,0.0f}
-	};
-
-	// UVの拡縮・回転・平行移動を保持する
-	Transform uvTransformSprite{
-		{1.0f,1.0f,1.0f},
-		{0.0f,0.0f,0.0f},
-		{0.0f,0.0f,0.0f}
-	};
-
 	// -------------------------------------
-	// Textureの読み込み
+	// TextureManagerの初期化
 	// -------------------------------------
 
-	// 1枚目のテクスチャ
-	DirectX::ScratchImage mipImages = DirectXCommon::LoadTexture("resources/circle.png");
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	auto textureResourceOwner = dxCommon.CreateTextureResource(metadata);
-	ID3D12Resource* textureResource = textureResourceOwner.Get();
-	auto intermediateResourceOwner = dxCommon.UploadTextureData( textureResourceOwner, mipImages );
+	TextureManager textureManager;
+	textureManager.Initialize(&dxCommon);
 
-	// 2枚目のテクスチャ
-	DirectX::ScratchImage mipImages2 = DirectXCommon::LoadTexture("resources/monsterBall.png");
-	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
-	auto textureResource2Owner = dxCommon.CreateTextureResource(metadata2);
-	ID3D12Resource* textureResource2 = textureResource2Owner.Get();
-	auto intermediateResource2Owner = dxCommon.UploadTextureData( textureResource2Owner, mipImages2 );
+	// -------------------------------------
+	// テクスチャを一括管理
+	// -------------------------------------
 
-	// 3枚目のテクスチャ
-	DirectX::ScratchImage mipImages3 = DirectXCommon::LoadTexture( modelData2.material.textureFilePath );
-	const DirectX::TexMetadata& metadata3 = mipImages3.GetMetadata();
-	auto textureResource3Owner = dxCommon.CreateTextureResource(metadata3);
-	ID3D12Resource* textureResource3 = textureResource3Owner.Get();
-	auto intermediateResource3Owner = dxCommon.UploadTextureData( textureResource3Owner, mipImages3 );
+	// 1枚目：circle
+	uint32_t circleTextureIndex =
+		textureManager.LoadTexture(
+			"resources/circle.png"
+		);
 
-	// metaDataを基にSRVの設定
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	srvDesc.Format = metadata.format;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // 2Dテクスチャ
-	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+	// 2枚目：monsterBall
+	uint32_t monsterTextureIndex =
+		textureManager.LoadTexture(
+			"resources/monsterBall.png"
+		);
 
-	// SRVを作成するDescriptorHeapの場所を決める
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = dxCommon.GetSRVCPUDescriptorHandle(1);
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = dxCommon.GetSRVGPUDescriptorHandle(1);
+	// 3枚目：2個目のモデル用
+	uint32_t modelTextureIndex =
+		textureManager.LoadTexture(
+			modelData2.material.textureFilePath
+		);
 
-	// 先頭はImGuiが使っているのでその次を使う
-	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	// -------------------------------------
+	// 3Dモデル描画用GPUハンドル
+	// -------------------------------------
 
-	// SRVの生成
-	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = textureManager.GetGPUHandle(circleTextureIndex);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = textureManager.GetGPUHandle(monsterTextureIndex);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 = textureManager.GetGPUHandle(modelTextureIndex);
 
-	// 2枚目のSRV
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2{};
-	srvDesc2.Format = metadata2.format;
-	srvDesc2.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc2.Texture2D.MipLevels = UINT(metadata2.mipLevels);
-
-	// インデックス2に作る
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = dxCommon.GetSRVCPUDescriptorHandle(2);
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = dxCommon.GetSRVGPUDescriptorHandle(2);
-
-	// SRVの生成
-	device->CreateShaderResourceView(textureResource2, &srvDesc2, textureSrvHandleCPU2);
-
-	// ------------------------------
-	// 3枚目のSRV
-	// 2個目OBJ用Texture
-	// ------------------------------
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc3{};
-	srvDesc3.Format = metadata3.format;
-	srvDesc3.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc3.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc3.Texture2D.MipLevels = static_cast<UINT>(metadata3.mipLevels);
-
-	// Descriptor4番を使用
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU3 = dxCommon.GetSRVCPUDescriptorHandle(4);
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 = dxCommon.GetSRVGPUDescriptorHandle(4);
-
-	// SRV生成
-	device->CreateShaderResourceView(textureResource3, &srvDesc3, textureSrvHandleCPU3);
-
-	// どちらのTextureを使うかのフラグ
+	// どちらのTextureを使うか
 	bool useMonsterBall = true;
 
 	// -----------------
@@ -1741,6 +1574,65 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		&instancingSrvDesc,
 		instancingSrvHandleCPU
 	);
+
+	// =====================================
+	// SpriteCommon初期化
+	// =====================================
+
+	SpriteCommon spriteCommon;
+	spriteCommon.Initialize(&dxCommon);
+
+	// =====================================
+	// 1枚目のSprite初期化
+	// =====================================
+
+	Sprite sprite1;
+
+	sprite1.Initialize(
+		&spriteCommon,
+		textureManager.GetGPUHandle(circleTextureIndex),
+		textureManager.GetTextureSize(circleTextureIndex)
+	);
+
+	// 左上から50px、50px
+	sprite1.SetPosition({ 50.0f, 50.0f });
+
+	// 描画サイズ
+	sprite1.SetSize({ 200.0f, 200.0f });
+
+	// =====================================
+	// 2枚目のSprite初期化
+	// =====================================
+
+	Sprite sprite2;
+
+	sprite2.Initialize(
+		&spriteCommon,
+		textureManager.GetGPUHandle(monsterTextureIndex),
+		textureManager.GetTextureSize(monsterTextureIndex)
+	);
+
+	// 個別の座標
+	sprite2.SetPosition({ 350.0f, 150.0f });
+
+	// 描画サイズ
+	sprite2.SetSize({ 200.0f, 200.0f });
+
+	// =====================================
+	// 2枚目は画像の左上4分の1を使用
+	// =====================================
+
+	Vector2 monsterTextureSize = textureManager.GetTextureSize(monsterTextureIndex);
+
+	sprite2.SetTextureLeftTop({ 0.0f, 0.0f });
+
+	sprite2.SetTextureSize({
+		monsterTextureSize.x * 0.5f,
+		monsterTextureSize.y * 0.5f
+		});
+
+	// 最初のフレームでGPU転送完了後に解放する
+	bool isSpriteTextureUploadReleased = false;
 
 	// ------------------------------
 	// ゲームループ
@@ -1962,27 +1854,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			);
 
 		// GPUへ送る
-		particleMaterialData->uvTransform =
-			particleUVMatrix;
+		particleMaterialData->uvTransform = particleUVMatrix;
 
-		// ---------------------
-		// Sprite用WVP
-		// ---------------------
+		// ------------------------------------
+		// Sprite更新
+		// ------------------------------------
 
-		// World
-		Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
-		// View
-		Matrix4x4 viewMatrixSprite = MakeIdentity4x4();
-		// Projection
-		Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(WinApp::kClientWidth), float(WinApp::kClientHeight), 0.0f, 100.0f);
-		// WVP
-		Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
-		// Sprite用WVP行列をGPUへ渡す
-		transformationMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
-		// Sprite用World行列をGPUへ渡す
-		transformationMatrixDataSprite->World = worldMatrixSprite;
-		// Sprite用Worldの逆行列の転置行列をGPUへ渡す
-		transformationMatrixDataSprite->WorldInverseTranspose = MakeIdentity4x4();
+		sprite1.Update();
+		sprite2.Update();
 
 #ifdef USE_IMGUI
 
@@ -2107,18 +1986,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 #endif
 
-		// ------------------------------
-		// Sprite用UVTransform行列を作る
-		// ------------------------------
-
-		// 拡縮行列を作る
-		Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
-		// Z軸回転行列を掛ける
-		uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
-		// 平行移動行列を掛ける
-		uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
-		// Sprite用MaterialへUV変換行列を書き込む
-		materialDataSprite->uvTransform = uvTransformMatrix;
 
 
 		// Windowにメッセージが来ていたら最優先で処理させる
@@ -2251,42 +2118,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//	);
 			//}
 
-			// ---------------------
+			// =====================================
 			// Sprite描画
-			// ---------------------
+			// =====================================
 
-			// Object3d用RootSignatureに戻す
-			commandList->SetGraphicsRootSignature(rootSignature);
+			// スプライト用RootSignature・PSOを設定
+			spriteCommon.CommonDraw();
 
-			// Object3d用PSOに戻す
-			commandList->SetPipelineState(graphicsPipelineStates[blendMode]);
+			// 1枚目を描画
+			sprite1.Draw();
 
-			// Sprite用VBVを設定
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-
-			// Sprite用IBVを設定
-			commandList->IASetIndexBuffer(&indexBufferViewSprite);
-
-			// SpriteはLightingを行わないMaterialを使用する
-			commandList->SetGraphicsRootConstantBufferView(
-				0,
-				materialResourceSprite->GetGPUVirtualAddress()
-			);
-
-			// Sprite用TransformationMatrixを設定
-			commandList->SetGraphicsRootConstantBufferView(
-				1,
-				transformationMatrixResourceSprite->GetGPUVirtualAddress()
-			);
-
-			// Spriteでは常にuvCheckerを使用する
-			commandList->SetGraphicsRootDescriptorTable(
-				2,
-				textureSrvHandleGPU
-			);
-
-			// Sprite描画
-			// commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			// 2枚目を描画
+			sprite2.Draw();
 
 #ifdef USE_IMGUI
 			// ImGuiの描画を行う
@@ -2297,6 +2140,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 描画後処理
 			// ---------------------------------
 			dxCommon.PostDraw();
+
+			// Spriteテクスチャ転送用リソース解放
+			if (!isSpriteTextureUploadReleased) {
+
+				textureManager.ReleaseUploadResources();
+
+				isSpriteTextureUploadReleased = true;
+			}
 		}
 	}
 
@@ -2336,22 +2187,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ComPtrで所有しているリソースの解放
 	// ------------------------------
 
-	// 転送用中間リソース
-	intermediateResourceOwner.Reset();
-	intermediateResource2Owner.Reset();
-	intermediateResource3Owner.Reset();
-
-	// テクスチャ
-	textureResourceOwner.Reset();
-	textureResource2Owner.Reset();
-	textureResource3Owner.Reset();
-
-	// Sprite関連
-	vertexResourceSpriteOwner.Reset();
-	indexResourceSpriteOwner.Reset();
-	transformationMatrixResourceSpriteOwner.Reset();
-	materialResourceSpriteOwner.Reset();
-
 	// モデル関連
 	vertexResourceOwner.Reset();
 	vertexResource2Owner.Reset();
@@ -2369,6 +2204,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	directionalLightResourceOwner.Reset();
 	pointLightResourceOwner.Reset();
 	spotLightResourceOwner.Reset();
+
+	// TextureManagerの終了
+	textureManager.Finalize();
 
 	// DirectX12基盤の終了処理
 	dxCommon.Finalize();
