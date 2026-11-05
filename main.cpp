@@ -22,6 +22,8 @@
 #include "Object3d.h"
 #include "Model.h"
 #include "ModelManager.h"
+#include "SrvManager.h"
+#include "ImGuiManager.h"
 #include "D3DResourceLeakChecker.h"
 #include <wrl.h>
 
@@ -198,6 +200,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	DirectXCommon dxCommon;
 	// WinAppを渡して初期化
 	dxCommon.Initialize(&winApp);
+
+	// ---------------------------------
+	// SrvManager初期化
+	// ---------------------------------
+
+	SrvManager srvManager;
+	srvManager.Initialize(&dxCommon);
+
+	// ---------------------------------
+	// ImGuiManagerの初期化
+	// ---------------------------------
+
+	ImGuiManager imguiManager;
+	imguiManager.Initialize(&winApp, &dxCommon, &srvManager);
 
 	// DirectXCommonが所有するデバイスを取得
 	ID3D12Device* device = dxCommon.GetDevice();
@@ -1168,7 +1184,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// -------------------------------------
 
 	TextureManager textureManager;
-	textureManager.Initialize(&dxCommon);
+	textureManager.Initialize(&dxCommon, &srvManager);
 
 	// -------------------------------------
 	// テクスチャを一括管理
@@ -1222,9 +1238,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	instancingSrvDesc.Buffer.StructureByteStride =
 		sizeof(ParticleForGPU);
 
-	// 3番を使用
-	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = dxCommon.GetSRVCPUDescriptorHandle(3);
-	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = dxCommon.GetSRVGPUDescriptorHandle(3);
+	// -------------------------------------
+	// Particle用SRV
+	// -------------------------------------
+
+	// 既存のParticleは3番を使用
+	constexpr uint32_t kParticleSrvIndex = 3;
+
+	// CPUハンドルをSrvManagerから取得
+	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = srvManager.GetCPUDescriptorHandle(kParticleSrvIndex);
+
+	// GPUハンドルをSrvManagerから取得
+	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = srvManager.GetGPUDescriptorHandle(kParticleSrvIndex);
 
 	// SRV作成
 	device->CreateShaderResourceView(
@@ -1393,14 +1418,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ウィンドウのXボタンが押されるまでループする
 	while (!winApp.IsEndRequested()) {
 
-#ifdef USE_IMGUI
-
 		// ImGuiのフレーム開始
-		ImGui_ImplDX12_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
-
-#endif
+		imguiManager.Begin();
 
 		// ------------------------------
 		// 入力更新
@@ -1709,8 +1728,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			pointLightData->intensity = 0.0f;
 		}
 
-		// ImGuiの描画を行う
-		ImGui::Render();
+		// ImGuiのフレーム終了
+		imguiManager.End();
 
 #endif
 
@@ -1848,10 +1867,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 2枚目を描画
 			sprite2.Draw();
 
-#ifdef USE_IMGUI
-			// ImGuiの描画を行う
-			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
-#endif
+			// ImGuiの描画
+			imguiManager.Draw();
 
 			// ---------------------------------
 			// 描画後処理
@@ -1914,6 +1931,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// TextureManagerの終了
 	textureManager.Finalize();
+
+	// ImGuiManager終了
+	imguiManager.Finalize();
+
+	// SrvManager終了
+	srvManager.Finalize();
 
 	// DirectX12基盤の終了処理
 	dxCommon.Finalize();

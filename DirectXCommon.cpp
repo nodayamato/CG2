@@ -11,12 +11,6 @@
 #include <thread>
 #include <dxcapi.h>
 
-#ifdef USE_IMGUI
-#include "externals/imgui/imgui.h"
-#include "externals/imgui/imgui_impl_win32.h"
-#include "externals/imgui/imgui_impl_dx12.h"
-#endif
-
 #pragma comment(lib, "dxcompiler.lib")
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -55,8 +49,6 @@ void DirectXCommon::Initialize(WinApp* winApp) {
     InitializeScissorRect();
     // DXCの初期化
     InitializeDXC();
-    // ImGuiの初期化
-    InitializeImGui(hwnd);
 }
 
 // =====================================
@@ -235,7 +227,7 @@ void DirectXCommon::CreateDescriptorHeaps() {
     // SRV
     D3D12_DESCRIPTOR_HEAP_DESC srvDesc{};
     srvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    srvDesc.NumDescriptors = 128;
+    srvDesc.NumDescriptors = kMaxSRVCount;
     srvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
     hr = device_->CreateDescriptorHeap(
@@ -401,7 +393,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE
 DirectXCommon::GetSRVCPUDescriptorHandle(
     uint32_t index) const {
 
-    assert(index < 128);
+    assert(index < kMaxSRVCount);
 
     D3D12_CPU_DESCRIPTOR_HANDLE handle =
         srvDescriptorHeap_->GetCPUDescriptorHandleForHeapStart();
@@ -418,7 +410,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE
 DirectXCommon::GetSRVGPUDescriptorHandle(
     uint32_t index) const {
 
-    assert(index < 128);
+    assert(index < kMaxSRVCount);
 
     D3D12_GPU_DESCRIPTOR_HANDLE handle =
         srvDescriptorHeap_->GetGPUDescriptorHandleForHeapStart();
@@ -626,9 +618,6 @@ void DirectXCommon::UpdateFixFPS() {
 // =====================================
 void DirectXCommon::Finalize() {
 
-    // ImGuiを先に終了する
-    FinalizeImGui();
-
     // DXC関連の解放
     includeHandler_.Reset();
     dxcCompiler_.Reset();
@@ -697,60 +686,6 @@ void DirectXCommon::InitializeDXC() {
     );
 
     assert(SUCCEEDED(hr));
-}
-
-// =====================================
-// ImGuiの初期化
-// =====================================
-void DirectXCommon::InitializeImGui(HWND hwnd) {
-
-#ifdef USE_IMGUI
-
-    assert(hwnd != nullptr);
-
-    // ImGuiのバージョンチェック
-    IMGUI_CHECKVERSION();
-
-    // コンテキスト作成
-    ImGui::CreateContext();
-
-    // スタイル設定
-    ImGui::StyleColorsDark();
-
-    // Win32の初期化
-    ImGui_ImplWin32_Init(hwnd);
-
-    // DirectX12の初期化
-    ImGui_ImplDX12_Init(
-        device_.Get(),
-        kBackBufferCount,
-        DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
-        srvDescriptorHeap_.Get(),
-        srvDescriptorHeap_->GetCPUDescriptorHandleForHeapStart(),
-        srvDescriptorHeap_->GetGPUDescriptorHandleForHeapStart()
-    );
-
-    // フォントの準備
-    ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->Build();
-
-#else
-    (void)hwnd;
-#endif
-}
-
-// =====================================
-// ImGuiの終了処理
-// =====================================
-void DirectXCommon::FinalizeImGui() {
-
-#ifdef USE_IMGUI
-
-    ImGui_ImplDX12_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
-
-#endif
 }
 
 // =====================================
