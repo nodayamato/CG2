@@ -21,6 +21,9 @@ public:
     // バックバッファ数
     static constexpr UINT kBackBufferCount = 2;
 
+    // SRVディスクリプタの最大数
+    static constexpr uint32_t kMaxSRVCount = 128;
+
     // 初期化
     void Initialize(WinApp* winApp);
 
@@ -187,12 +190,6 @@ private:
 
     // DXC初期化
     void InitializeDXC();
-
-    // ImGui初期化
-    void InitializeImGui(HWND hwnd);
-
-    // ImGui終了
-    void FinalizeImGui();
 
 private:
     // DXGIファクトリー

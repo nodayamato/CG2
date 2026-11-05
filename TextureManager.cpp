@@ -1,22 +1,29 @@
 #include "TextureManager.h"
+
 #include "DirectXCommon.h"
+#include "SrvManager.h"
 
 #include <cassert>
+#include <limits>
 #include <utility>
 
 // =====================================
 // 初期化
 // =====================================
 void TextureManager::Initialize(
-    DirectXCommon* dxCommon
+    DirectXCommon* dxCommon,
+    SrvManager* srvManager
 ) {
     assert(dxCommon != nullptr);
+    assert(srvManager != nullptr);
     assert(dxCommon->GetDevice() != nullptr);
 
     dxCommon_ = dxCommon;
+    srvManager_ = srvManager;
 
     textures_.clear();
     textureIndices_.clear();
+    textureArrayIndices_.clear();
 }
 
 // =====================================
@@ -26,6 +33,7 @@ uint32_t TextureManager::LoadTexture(
     const std::string& filePath
 ) {
     assert(dxCommon_ != nullptr);
+    assert(srvManager_ != nullptr);
     assert(!filePath.empty());
 
     // ---------------------------------
@@ -35,22 +43,12 @@ uint32_t TextureManager::LoadTexture(
 
     if (it != textureIndices_.end()) {
 
-        // 読み込み済みなら番号を返す
+        // 既存のSRV番号を返す
         return it->second;
     }
 
     // ---------------------------------
-    // 空きSRVインデックスを取得
-    // ---------------------------------
-    uint32_t textureIndex =
-        kFirstTextureIndex +
-        static_cast<uint32_t>(textures_.size());
-
-    // SRVヒープの範囲を確認
-    assert(textureIndex < kMaxSRVCount);
-
-    // ---------------------------------
-    // ファイルからテクスチャ読み込み
+    // 画像を読み込む
     // ---------------------------------
     DirectX::ScratchImage mipImages =
         DirectXCommon::LoadTexture(filePath);
@@ -66,12 +64,14 @@ uint32_t TextureManager::LoadTexture(
     textureData.filePath = filePath;
 
     textureData.resource =
-        dxCommon_->CreateTextureResource(metadata);
+        dxCommon_->CreateTextureResource(
+            metadata
+        );
 
     assert(textureData.resource != nullptr);
 
     // ---------------------------------
-    // GPUへの転送を記録
+    // GPUへの転送
     // ---------------------------------
     textureData.uploadResource =
         dxCommon_->UploadTextureData(
@@ -79,53 +79,42 @@ uint32_t TextureManager::LoadTexture(
             mipImages
         );
 
-    assert(textureData.uploadResource != nullptr);
-
-    // ---------------------------------
-    // SRVの設定
-    // ---------------------------------
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-
-    srvDesc.Format = metadata.format;
-
-    srvDesc.Shader4ComponentMapping =
-        D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-    srvDesc.ViewDimension =
-        D3D12_SRV_DIMENSION_TEXTURE2D;
-
-    srvDesc.Texture2D.MipLevels =
-        static_cast<UINT>(metadata.mipLevels);
-
-    // ---------------------------------
-    // CPU・GPUハンドル取得
-    // ---------------------------------
-    D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle =
-        dxCommon_->GetSRVCPUDescriptorHandle(
-            textureIndex
-        );
-
-    textureData.gpuHandle =
-        dxCommon_->GetSRVGPUDescriptorHandle(
-            textureIndex
-        );
-
-    // ---------------------------------
-    // SRV生成
-    // ---------------------------------
-    ID3D12Device* device =
-        dxCommon_->GetDevice();
-
-    assert(device != nullptr);
-
-    device->CreateShaderResourceView(
-        textureData.resource.Get(),
-        &srvDesc,
-        cpuHandle
+    assert(
+        textureData.uploadResource != nullptr
     );
 
     // ---------------------------------
-    // テクスチャサイズ保存
+    // SrvManagerから番号を取得
+    // ---------------------------------
+    assert(srvManager_->CanAllocate());
+
+    uint32_t textureIndex =
+        srvManager_->Allocate();
+
+    textureData.srvIndex = textureIndex;
+
+    // ---------------------------------
+    // SrvManagerでSRVを生成
+    // ---------------------------------
+    srvManager_->CreateSRVForTexture2D(
+        textureIndex,
+        textureData.resource.Get(),
+        metadata.format,
+        static_cast<uint32_t>(
+            metadata.mipLevels
+            )
+    );
+
+    // ---------------------------------
+    // GPUハンドルを取得
+    // ---------------------------------
+    textureData.gpuHandle =
+        srvManager_->GetGPUDescriptorHandle(
+            textureIndex
+        );
+
+    // ---------------------------------
+    // 画像サイズ保存
     // ---------------------------------
     textureData.textureSize = {
         static_cast<float>(metadata.width),
@@ -133,8 +122,10 @@ uint32_t TextureManager::LoadTexture(
     };
 
     // ---------------------------------
-    // 管理リストに登録
+    // 管理情報を登録
     // ---------------------------------
+    size_t arrayIndex = textures_.size();
+
     textures_.push_back(
         std::move(textureData)
     );
@@ -144,27 +135,31 @@ uint32_t TextureManager::LoadTexture(
         textureIndex
     );
 
-    // 登録した番号を返す
+    textureArrayIndices_.emplace(
+        textureIndex,
+        arrayIndex
+    );
+
     return textureIndex;
 }
 
 // =====================================
-// テクスチャ配列のインデックス取得
+// SRV番号から配列位置を取得
 // =====================================
 size_t TextureManager::GetArrayIndex(
     uint32_t textureIndex
 ) const {
 
-    assert(textureIndex >= kFirstTextureIndex);
+    auto it =
+        textureArrayIndices_.find(
+            textureIndex
+        );
 
-    size_t arrayIndex =
-        static_cast<size_t>(
-            textureIndex - kFirstTextureIndex
-            );
+    assert(
+        it != textureArrayIndices_.end()
+    );
 
-    assert(arrayIndex < textures_.size());
-
-    return arrayIndex;
+    return it->second;
 }
 
 // =====================================
@@ -195,13 +190,11 @@ Vector2 TextureManager::GetTextureSize(
 }
 
 // =====================================
-// GPU転送用リソースの解放
+// GPU転送用リソース解放
 // =====================================
 void TextureManager::ReleaseUploadResources() {
 
-    // 注意：
-    // 転送コマンドのGPU実行完了後に呼ぶこと
-
+    // GPU転送完了後に呼び出す
     for (TextureData& texture : textures_) {
 
         texture.uploadResource.Reset();
@@ -213,11 +206,14 @@ void TextureManager::ReleaseUploadResources() {
 // =====================================
 void TextureManager::Finalize() {
 
-    // ComPtrのリソースを解放
+    // テクスチャを解放
     textures_.clear();
 
-    // テクスチャ番号の登録情報を消去
+    // 管理情報をクリア
     textureIndices_.clear();
+    textureArrayIndices_.clear();
 
+    // 外部クラスへの参照解除
     dxCommon_ = nullptr;
+    srvManager_ = nullptr;
 }
