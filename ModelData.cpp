@@ -1,5 +1,6 @@
 #include "ModelData.h"
 
+#include <Windows.h>
 #include <cassert>
 #include <cstdint>
 #include <string>
@@ -119,7 +120,22 @@ ModelData LoadModelFile(const std::string& directoryPath, const std::string& fil
 	// ------------------------------
 	// 読み込み確認
 	// ------------------------------
-	assert(scene != nullptr);
+	if (scene == nullptr) {
+
+		std::string errorMessage =
+			"Model Load Failed\n"
+			"File: " + filePath +
+			"\nReason: " + importer.GetErrorString();
+
+		MessageBoxA(
+			nullptr,
+			errorMessage.c_str(),
+			"Model Load Error",
+			MB_OK | MB_ICONERROR
+		);
+
+		assert(false);
+	}
 
 	// Meshが存在することを確認
 	assert(scene->HasMeshes());
