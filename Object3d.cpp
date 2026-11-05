@@ -2,6 +2,7 @@
 #include "Object3dCommon.h"
 #include "DirectXCommon.h"
 #include "Model.h"
+#include "Camera.h"
 
 #include <cassert>
 #include <cstdint>
@@ -87,6 +88,27 @@ void Object3d::CreateTransformationMatrixResource() {
 
     transformationMatrixData_->WorldInverseTranspose =
         MakeIdentity4x4();
+}
+
+// =====================================
+// 共通Cameraを使用して更新
+// =====================================
+void Object3d::Update() {
+
+    assert(object3dCommon_ != nullptr);
+
+    // 共通Cameraを取得
+    Camera* camera =
+        object3dCommon_->GetDefaultCamera();
+
+    assert(camera != nullptr);
+
+    // CameraからView・Projectionを取得し、
+    // 既存の行列更新処理を呼び出す
+    Update(
+        camera->GetViewMatrix(),
+        camera->GetProjectionMatrix()
+    );
 }
 
 // =====================================

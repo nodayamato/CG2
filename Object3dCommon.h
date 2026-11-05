@@ -7,6 +7,7 @@
 #include <array>
 
 class DirectXCommon;
+class Camera;
 
 // =====================================
 // 3Dオブジェクト共通処理
@@ -30,6 +31,16 @@ public:
         return dxCommon_;
     }
 
+    // 共通Cameraの設定
+    void SetDefaultCamera(Camera* camera) {
+        defaultCamera_ = camera;
+    }
+
+    // 共通Cameraの取得
+    Camera* GetDefaultCamera() const {
+        return defaultCamera_;
+    }
+
 private:
 
     // RootSignature生成
@@ -42,6 +53,9 @@ private:
 
     // DirectXCommon（所有しない）
     DirectXCommon* dxCommon_ = nullptr;
+
+    // 共通カメラ（所有しない）
+    Camera* defaultCamera_ = nullptr;
 
     // RootSignature
     Microsoft::WRL::ComPtr<ID3D12RootSignature>

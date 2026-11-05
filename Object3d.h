@@ -17,6 +17,9 @@ public:
     // 初期化
     void Initialize(Object3dCommon* object3dCommon);
 
+    // 共通Cameraを使用して更新
+    void Update();
+
     // 更新
     void Update(
         const Matrix4x4& viewMatrix,

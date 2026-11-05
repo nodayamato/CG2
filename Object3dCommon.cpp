@@ -384,4 +384,6 @@ void Object3dCommon::Finalize() {
 
     // DirectXCommonへの参照解除
     dxCommon_ = nullptr;
+
+    defaultCamera_ = nullptr;
 }
