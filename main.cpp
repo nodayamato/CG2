@@ -18,6 +18,10 @@
 #include "SpriteCommon.h"
 #include "Sprite.h"
 #include "TextureManager.h"
+#include "Object3dCommon.h"
+#include "Object3d.h"
+#include "Model.h"
+#include "ModelManager.h"
 #include "D3DResourceLeakChecker.h"
 #include <wrl.h>
 
@@ -32,6 +36,7 @@
 #include <numbers>
 #include <format>
 #include <ostream>
+#include <utility>
 
 // DirectX12関連
 #include <d3d12.h>
@@ -277,28 +282,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	audio.PlayWave();
 
 	// ---------------------------------
-	// Object3D用シェーダー
-	// ---------------------------------
-
-	// VertexShader
-	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob =
-		dxCommon.CompileShader(
-			L"Object3d.VS.hlsl",
-			L"vs_6_0"
-		);
-
-	assert(vertexShaderBlob != nullptr);
-
-	// PixelShader
-	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob =
-		dxCommon.CompileShader(
-			L"Object3d.PS.hlsl",
-			L"ps_6_0"
-		);
-
-	assert(pixelShaderBlob != nullptr);
-
-	// ---------------------------------
 	// Particle用シェーダー
 	// ---------------------------------
 
@@ -319,119 +302,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		);
 
 	assert(particlePixelShaderBlob != nullptr);
-
-	// RootSignature作成
-	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
-	descriptionRootSignature.Flags =
-		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-	// RootParameter作成
-	D3D12_ROOT_PARAMETER rootParameters[7] = {};
-	// CBVを設定
-	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	// PixelShaderを設定
-	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	// b0を設定
-	rootParameters[0].Descriptor.ShaderRegister = 0;
-	// CBVを設定
-	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	// VertexShaderを設定
-	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	// b0を設定
-	rootParameters[1].Descriptor.ShaderRegister = 0;
-
-	// Sampler
-	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
-
-	staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	staticSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	staticSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	staticSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-	staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
-	staticSamplers[0].ShaderRegister = 0;
-	staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-	descriptionRootSignature.pStaticSamplers = staticSamplers;
-	descriptionRootSignature.NumStaticSamplers = _countof(staticSamplers);
-	// RootSignatureへ設定
-	descriptionRootSignature.pParameters = rootParameters;
-	descriptionRootSignature.NumParameters = _countof(rootParameters);
-	// SRV用DescriptorRange
-	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-	descriptorRange[0].BaseShaderRegister = 0;
-	descriptorRange[0].NumDescriptors = 1;
-	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-	// Texture(SRV)
-	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange;
-	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange);
-	// 平行光源用のCBVを設定
-	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	// PixelShaderで使用する
-	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	// HLSL側のregister(b1)と対応
-	rootParameters[3].Descriptor.ShaderRegister = 1;
-
-	// Camera用CBV
-	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	// HLSLの register(b2)
-	rootParameters[4].Descriptor.ShaderRegister = 2;
-
-	// PointLight用CBV
-	rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	// HLSLの register(b3)
-	rootParameters[5].Descriptor.ShaderRegister = 3;
-
-	// SpotLight用CBV
-	rootParameters[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	rootParameters[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	// HLSL側の register(b4)
-	rootParameters[6].Descriptor.ShaderRegister = 4;
-
-	// ------------------------------------
-	// Object3D用RootSignature
-	// ------------------------------------
-
-	Microsoft::WRL::ComPtr<ID3DBlob> signatureBlob;
-	Microsoft::WRL::ComPtr<ID3DBlob> errorBlob;
-
-	hr = D3D12SerializeRootSignature(
-		&descriptionRootSignature,
-		D3D_ROOT_SIGNATURE_VERSION_1,
-		signatureBlob.GetAddressOf(),
-		errorBlob.GetAddressOf()
-	);
-
-	if (FAILED(hr)) {
-		if (errorBlob != nullptr) {
-			Logger::Log(reinterpret_cast<const char*>(
-				errorBlob->GetBufferPointer()
-				));
-		}
-		assert(false);
-	}
-
-	assert(SUCCEEDED(hr));
-
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignatureOwner;
-
-	hr = device->CreateRootSignature(
-		0,
-		signatureBlob->GetBufferPointer(),
-		signatureBlob->GetBufferSize(),
-		IID_PPV_ARGS(rootSignatureOwner.GetAddressOf())
-	);
-
-	assert(SUCCEEDED(hr));
-
-	// 既存の描画処理で使うポインタ
-	ID3D12RootSignature* rootSignature = rootSignatureOwner.Get();
 
 	// -----------------
 	// Particle用RootSignature
@@ -660,73 +530,43 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// すでに書き込まれている深度値と同じか、より手前なら描画する
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC graphicsPipelineStateDesc{};
+	// ------------------------------
+	// Particle用PSOの基本設定
+	// ------------------------------
 
-	graphicsPipelineStateDesc.pRootSignature = rootSignature;
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC particlePipelineStateDesc{};
 
-	graphicsPipelineStateDesc.InputLayout = inputLayoutDesc;
+	// Particle用RootSignature
+	particlePipelineStateDesc.pRootSignature = particleRootSignature;
 
-	graphicsPipelineStateDesc.VS = {
-		vertexShaderBlob->GetBufferPointer(),
-		vertexShaderBlob->GetBufferSize()
-	};
+	// 頂点入力情報
+	particlePipelineStateDesc.InputLayout = inputLayoutDesc;
 
-	graphicsPipelineStateDesc.PS = {
-		pixelShaderBlob->GetBufferPointer(),
-		pixelShaderBlob->GetBufferSize()
-	};
+	// Rasterizer
+	particlePipelineStateDesc.RasterizerState = rasterizerDesc;
 
-	graphicsPipelineStateDesc.RasterizerState = rasterizerDesc;
+	// DepthStencil
+	particlePipelineStateDesc.DepthStencilState = depthStencilDesc;
 
-	// DepthStencilStateを設定
-	graphicsPipelineStateDesc.DepthStencilState = depthStencilDesc;
+	// DSV
+	particlePipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
-	// DSVのFormatを設定
-	graphicsPipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	// RenderTarget
+	particlePipelineStateDesc.NumRenderTargets = 1;
 
-	// 書き込むRTV情報
-	graphicsPipelineStateDesc.NumRenderTargets = 1;
-	graphicsPipelineStateDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	particlePipelineStateDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 
-	// 利用するトポロジ
-	graphicsPipelineStateDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	// TriangleList
+	particlePipelineStateDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 
-	// サンプル数
-	graphicsPipelineStateDesc.SampleDesc.Count = 1;
-	graphicsPipelineStateDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+	// サンプル設定
+	particlePipelineStateDesc.SampleDesc.Count = 1;
 
-	// -----------------
-	// ブレンドモードごとのPSOを生成
-	// -----------------
-
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> graphicsPipelineStatesOwner[kCountOfBlendMode];
-
-	// 描画処理で使う通常ポインタ
-	ID3D12PipelineState* graphicsPipelineStates[kCountOfBlendMode] = {};
-
-	for (uint32_t i = 0; i < kCountOfBlendMode; ++i) {
-
-		graphicsPipelineStateDesc.BlendState = blendDesc[i];
-
-		hr = device->CreateGraphicsPipelineState(
-			&graphicsPipelineStateDesc,
-			IID_PPV_ARGS(
-				graphicsPipelineStatesOwner[i].GetAddressOf()
-			)
-		);
-
-		assert(SUCCEEDED(hr));
-
-		graphicsPipelineStates[i] = graphicsPipelineStatesOwner[i].Get();
-	}
+	particlePipelineStateDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
 
 	// -----------------
 	// Particle用PSO
 	// -----------------
-
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC
-		particlePipelineStateDesc =
-		graphicsPipelineStateDesc;
 
 	// Particleは両面描画
 	particlePipelineStateDesc.RasterizerState.CullMode =
@@ -1183,186 +1023,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 頂点が作れているか確認
 	assert(!modelData.vertices.empty());
 
-	// ------------------------------
-	// モデル用頂点リソースを作成
-	// ------------------------------
-
-	// 読み込んだモデルの頂点数に合わせて頂点バッファを作る
-	auto vertexResourceOwner =
-		dxCommon.CreateBufferResource(
-			sizeof(VertexData) * modelData.vertices.size()
-		);
-
-	ID3D12Resource* vertexResource =vertexResourceOwner.Get();
-
-	// モデル用頂点バッファビューを作る
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-
-	// 頂点リソースのGPUアドレスを設定する
-	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-
-	// 頂点バッファ全体のサイズを設定する
-	vertexBufferView.SizeInBytes = static_cast<UINT>(sizeof(VertexData) * modelData.vertices.size());
-
-	// 1頂点分のサイズを設定する
-	vertexBufferView.StrideInBytes = sizeof(VertexData);
-
-	// ------------------------------
-	// モデルの頂点データを書き込む
-	// ------------------------------
-
-	// 頂点リソースの書き込み先
-	VertexData* vertexData = nullptr;
-
-	// CPUから書き込むためにMapする
-	HRESULT vertexMapResult = vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
-
-	assert(SUCCEEDED(vertexMapResult));
-
-	// LoadObjFileで読み込んだ全頂点を頂点リソースへコピーする
-	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
-
-	// ------------------------------
-	// Material用リソースを作る
-	// ------------------------------
-
-	// Material用リソース
-	auto materialResourceOwner = dxCommon.CreateBufferResource(256);
-	ID3D12Resource* materialResource = materialResourceOwner.Get();
-
-	// Map
-	Material* materialData = nullptr;
-
-	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
-
-	// 初期値
-	materialData->color = { 1.0f,1.0f,1.0f,1.0f };
-	materialData->enableLighting = true;
-
-	// 鏡面反射の鋭さ
-	materialData->shininess = 32.0f;
-
-	// 球のUVは最初は変形しない
-	materialData->uvTransform = MakeIdentity4x4();
-
-	// WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
-	auto wvpResourceOwner = dxCommon.CreateBufferResource(sizeof(TransformationMatrix));
-	ID3D12Resource* wvpResource = wvpResourceOwner.Get();
-
-	// データを書き込む
-	TransformationMatrix* wvpData = nullptr;
-
-	// 書き込むためのアドレスを取得
-	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
-
-	// 単位行列を書き込んでおく
-	wvpData->WVP = MakeIdentity4x4();
-	wvpData->World = MakeIdentity4x4();
-	wvpData->WorldInverseTranspose = MakeIdentity4x4();
-
 	// Transform変数を作る
 	Transform transform{
 		{1.0f, 1.0f, 1.0f},
 		{0.0f, -1.54f, 0.0f},
 		{0.0f, 0.0f, 0.0f}
-	};
-
-	// ------------------------------
-	// 2個目のモデルを読み込む
-	// ------------------------------
-
-	ModelData modelData2 =
-		LoadModelFile(
-			"resources/plane",
-			"plane.gltf"
-		);
-
-	assert(!modelData2.vertices.empty());
-
-	// ------------------------------
-	// 2個目の頂点リソース
-	// ------------------------------
-
-	auto vertexResource2Owner =
-		dxCommon.CreateBufferResource(
-			sizeof(VertexData) * modelData2.vertices.size()
-		);
-
-	ID3D12Resource* vertexResource2 = vertexResource2Owner.Get();
-
-	// ------------------------------
-	// 2個目のVertexBufferView
-	// ------------------------------
-
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView2{};
-
-	vertexBufferView2.BufferLocation =
-		vertexResource2->GetGPUVirtualAddress();
-
-	vertexBufferView2.SizeInBytes =
-		static_cast<UINT>(
-			sizeof(VertexData) *
-			modelData2.vertices.size()
-			);
-
-	vertexBufferView2.StrideInBytes =
-		sizeof(VertexData);
-
-	// ------------------------------
-	// 頂点を書き込む
-	// ------------------------------
-
-	VertexData* vertexData2 = nullptr;
-
-	vertexResource2->Map(
-		0,
-		nullptr,
-		reinterpret_cast<void**>(
-			&vertexData2
-			)
-	);
-
-	std::memcpy(
-		vertexData2,
-		modelData2.vertices.data(),
-		sizeof(VertexData)*
-		modelData2.vertices.size()
-	);
-
-	// ------------------------------
-	// 2個目のWVP
-	// ------------------------------
-
-	auto wvpResource2Owner = dxCommon.CreateBufferResource(sizeof(TransformationMatrix));
-	ID3D12Resource* wvpResource2 = wvpResource2Owner.Get();
-
-	TransformationMatrix* wvpData2 = nullptr;
-
-	wvpResource2->Map(
-		0,
-		nullptr,
-		reinterpret_cast<void**>(
-			&wvpData2
-			)
-	);
-
-	wvpData2->WVP =
-		MakeIdentity4x4();
-
-	wvpData2->World =
-		MakeIdentity4x4();
-
-	wvpData2->WorldInverseTranspose =
-		MakeIdentity4x4();
-
-	// ------------------------------
-	// 2個目のTransform
-	// ------------------------------
-
-	Transform transform2{
-		{1.0f, 1.0f, 1.0f},
-		{0.0f, -1.54f, 0.0f},
-		{3.0f, 0.0f, 0.0f}
 	};
 
 	// -----------------
@@ -1521,19 +1186,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			"resources/monsterBall.png"
 		);
 
-	// 3枚目：2個目のモデル用
-	uint32_t modelTextureIndex =
-		textureManager.LoadTexture(
-			modelData2.material.textureFilePath
-		);
-
 	// -------------------------------------
 	// 3Dモデル描画用GPUハンドル
 	// -------------------------------------
 
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = textureManager.GetGPUHandle(circleTextureIndex);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = textureManager.GetGPUHandle(monsterTextureIndex);
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 = textureManager.GetGPUHandle(modelTextureIndex);
 
 	// どちらのTextureを使うか
 	bool useMonsterBall = true;
@@ -1575,16 +1233,110 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		instancingSrvHandleCPU
 	);
 
-	// =====================================
+	// -------------------------------------
+	// Object3dCommon初期化
+	// -------------------------------------
+
+	Object3dCommon object3dCommon;
+	object3dCommon.Initialize(&dxCommon);
+
+	// -------------------------------------
+	// ModelManager初期化
+	// -------------------------------------
+
+	ModelManager modelManager;
+	modelManager.Initialize(
+		&dxCommon,
+		&textureManager
+	);
+
+	// -------------------------------------
+	// 球モデルをModelManagerに登録
+	// -------------------------------------
+
+	Model* sphereModel =
+		modelManager.RegisterGeneratedModel(
+			"sphere",
+			std::move(modelData),
+			circleTextureIndex
+		);
+
+	assert(sphereModel != nullptr);
+
+	// 現在のImGuiが編集するMaterial
+	Material* materialData = sphereModel->GetMaterialData();
+
+	assert(materialData != nullptr);
+
+	// -------------------------------------
+	// 球のObject3dを生成
+	// -------------------------------------
+
+	Object3d sphereObject;
+	sphereObject.Initialize(&object3dCommon);
+
+	sphereObject.SetModel(sphereModel);
+	sphereObject.SetTransform(transform);
+
+	// -------------------------------------
+	// 3Dモデル読み込み
+	// -------------------------------------
+
+	// ModelManagerがplane.gltfを管理する
+	Model* planeModel = modelManager.LoadModel(
+		"resources/plane",
+		"plane.gltf"
+	);
+
+	assert(planeModel != nullptr);
+
+	// 2つ目のModelを読み込む
+	Model* secondModel = modelManager.LoadModel(
+		"resources/fence",
+		"fence.obj"
+	);
+
+	assert(secondModel != nullptr);
+
+	// 異なるモデルが登録されていることを確認
+	assert(planeModel != secondModel);
+
+	// -------------------------------------
+	// 1個目の3Dオブジェクト
+	// -------------------------------------
+
+	Object3d object1;
+	object1.Initialize(&object3dCommon);
+
+	object1.SetModel(planeModel);
+	object1.SetPosition({ 3.0f, 0.0f, 0.0f });
+	object1.SetRotation({ 0.0f, -1.54f, 0.0f });
+	object1.SetScale({ 1.0f, 1.0f, 1.0f });
+
+	// -------------------------------------
+	// 2個目の3Dオブジェクト
+	// -------------------------------------
+
+	Object3d object2;
+	object2.Initialize(&object3dCommon);
+
+	// 1個目と同じModelを共有
+	object2.SetModel(secondModel);
+
+	object2.SetPosition({ 6.0f, 0.0f, 0.0f });
+	object2.SetRotation({ 0.0f, -1.54f, 0.0f });
+	object2.SetScale({ 1.0f, 1.0f, 1.0f });
+
+	// -------------------------------------
 	// SpriteCommon初期化
-	// =====================================
+	// -------------------------------------
 
 	SpriteCommon spriteCommon;
 	spriteCommon.Initialize(&dxCommon);
 
-	// =====================================
+	// -------------------------------------
 	// 1枚目のSprite初期化
-	// =====================================
+	// -------------------------------------
 
 	Sprite sprite1;
 
@@ -1600,9 +1352,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 描画サイズ
 	sprite1.SetSize({ 200.0f, 200.0f });
 
-	// =====================================
+	// -------------------------------------
 	// 2枚目のSprite初期化
-	// =====================================
+	// -------------------------------------
 
 	Sprite sprite2;
 
@@ -1618,9 +1370,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 描画サイズ
 	sprite2.SetSize({ 200.0f, 200.0f });
 
-	// =====================================
+	// -------------------------------------
 	// 2枚目は画像の左上4分の1を使用
-	// =====================================
+	// -------------------------------------
 
 	Vector2 monsterTextureSize = textureManager.GetTextureSize(monsterTextureIndex);
 
@@ -1682,61 +1434,37 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// Camera位置をGPUへ送る
 		cameraData->worldPosition = debugCamera.GetWorldPosition();
 
-		// ------------------------------
-		// 3Dモデル用行列更新
-		// ------------------------------
+		// ------------------------------------
+		// 3Dオブジェクト用行列更新
+		// ------------------------------------
 
-		// ワールド行列を作る
-		Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-		// DebugCameraからビュー行列を取得
+		// DebugCameraから行列を取得
 		Matrix4x4 viewMatrix = debugCamera.GetViewMatrix();
-		// DebugCameraから射影行列を取得
+
 		Matrix4x4 projectionMatrix = debugCamera.GetProjectionMatrix();
-		// ワールド行列、ビュー行列、射影行列を合成してWVP行列を作る
-		Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-		// World行列の逆行列を作る
-		Matrix4x4 worldInverseMatrix = Inverse(worldMatrix);
-		Matrix4x4 worldInverseTranspose = MakeIdentity4x4();
-		for (int y = 0; y < 4; ++y) {
-			for (int x = 0; x < 4; ++x) {
 
-				worldInverseTranspose.m[y][x] =
-					worldInverseMatrix.m[x][y];
-			}
-		}
-		// GPUへ転送
-		wvpData->WVP = worldViewProjectionMatrix;
-		// Lightingで使用するWorld行列
-		wvpData->World = worldMatrix;
-		// Lightingで使用するWorldの逆行列の転置行列
-		wvpData->WorldInverseTranspose = worldInverseTranspose;
+		// 今までのTransformを球に反映
+		sphereObject.SetTransform(transform);
 
-		// ------------------------------
-		// 2個目のモデル行列更新
-		// ------------------------------
+		// 球のワールド行列とWVPを更新
+		sphereObject.Update(
+			viewMatrix,
+			projectionMatrix
+		);
 
-		// 自分で設定しているTransform
-		Matrix4x4 modelWorldMatrix2 = MakeAffineMatrix(transform2.scale, transform2.rotate, transform2.translate);
-		// RootNodeのTransformを適用
-		Matrix4x4 worldMatrix2 = Multiply(modelData2.rootNode.localMatrix, modelWorldMatrix2);
-		// WVP
-		Matrix4x4 worldViewProjectionMatrix2 = Multiply(worldMatrix2, Multiply(viewMatrix, projectionMatrix));
-		// 逆行列
-		Matrix4x4 worldInverseMatrix2 = Inverse(worldMatrix2);
-		// 逆転置
-		Matrix4x4 worldInverseTranspose2 = MakeIdentity4x4();
-		for (int y = 0; y < 4; ++y) {
+		// ------------------------------------
+		// Object3dごとの行列更新
+		// ------------------------------------
 
-			for (int x = 0; x < 4; ++x) {
+		object1.Update(
+			viewMatrix,
+			projectionMatrix
+		);
 
-				worldInverseTranspose2.m[y][x] =
-					worldInverseMatrix2.m[x][y];
-			}
-		}
-		// GPUへ送る
-		wvpData2->WVP = worldViewProjectionMatrix2;
-		wvpData2->World = worldMatrix2;
-		wvpData2->WorldInverseTranspose = worldInverseTranspose2;
+		object2.Update(
+			viewMatrix,
+			projectionMatrix
+		);
 
 		// -----------------
 		// BillboardMatrix
@@ -1999,72 +1727,61 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// ---------------------------------
 			dxCommon.PreDraw();
 
-			// RootSignatureを設定
-			commandList->SetGraphicsRootSignature(rootSignature);
+			// -------------------------------------
+			// Object3dによる3Dモデル描画
+			// -------------------------------------
 
-			// PSOを設定
-			commandList->SetPipelineState(graphicsPipelineStates[blendMode]);
+			// 3Dオブジェクト共通のRootSignature・PSO
+			object3dCommon.CommonDraw(blendMode);
 
-			// 描画する形状を三角形リストに設定
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			// -------------------------------------
+			// Camera・LightのConstantBuffer
+			// -------------------------------------
 
-			// ---------------------
-			// OBJモデルの描画
-			// ---------------------
+			// 平行光源
+			commandList->SetGraphicsRootConstantBufferView(
+				3,
+				directionalLightResource->GetGPUVirtualAddress()
+			);
 
-			// OBJモデル用の頂点バッファを設定する
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+			// カメラ
+			commandList->SetGraphicsRootConstantBufferView(
+				4,
+				cameraResource->GetGPUVirtualAddress()
+			);
 
-			// OBJモデル用Materialを設定
-			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+			// 点光源
+			commandList->SetGraphicsRootConstantBufferView(
+				5,
+				pointLightResource->GetGPUVirtualAddress()
+			);
 
-			// OBJモデル用TransformationMatrixを設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+			// スポットライト
+			commandList->SetGraphicsRootConstantBufferView(
+				6,
+				spotLightResource->GetGPUVirtualAddress()
+			);
 
-			// 平行光源を設定
-			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
+			// =====================================
+			// 球モデルの描画
+			// =====================================
 
-			// Cameraの位置を設定
-			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
+			// 既存のテクスチャ切り替えを維持
+			sphereModel->SetTextureIndex(
+				useMonsterBall
+				? monsterTextureIndex
+				: circleTextureIndex
+			);
 
-			// 点光源を設定
-			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
+			// 球を描画
+			sphereObject.Draw();
 
-			// スポットライトを設定
-			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
+			// -------------------------------------
+			// 個別の3Dオブジェクトを描画
+			// -------------------------------------
 
-			// 使うTextureを設定
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
-
-			// OBJモデルを描画する
-			commandList->DrawInstanced(static_cast<UINT>(modelData.vertices.size()), 1, 0, 0);
-
-			// フラグが変わってもspriteを変えない
-			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
-
-			// ------------------------------------
-			// 2個目 : OBJ
-			// ------------------------------------
-
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferView2);
-
-			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
-
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResource2->GetGPUVirtualAddress());
-
-			// 2個目OBJのmtl Texture
-			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU3);
-
-			// Lightは共有
-			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
-
-			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
-
-			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
-
-			commandList->SetGraphicsRootConstantBufferView(6, spotLightResource->GetGPUVirtualAddress());
-
-			commandList->DrawInstanced(static_cast<UINT>(modelData2.vertices.size()), 1, 0, 0);
+			object1.Draw();
+			object2.Draw();
 
 			// -----------------
 			// Particle描画
@@ -2165,34 +1882,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	particleSignatureBlob.Reset();
 	particleErrorBlob.Reset();
 
-	// Object3D用PSO
-	for (uint32_t i = 0; i < kCountOfBlendMode; ++i) {
-		graphicsPipelineStatesOwner[i].Reset();
-	}
-
-	// Object3D用RootSignature
-	rootSignatureOwner.Reset();
-
-	// Object3D用シリアライズ結果
-	signatureBlob.Reset();
-	errorBlob.Reset();
-
-	// コンパイル済みShader
-	vertexShaderBlob.Reset();
-	pixelShaderBlob.Reset();
+	// Particle用シェーダーを解放
 	particleVertexShaderBlob.Reset();
 	particlePixelShaderBlob.Reset();
 
 	// ------------------------------
 	// ComPtrで所有しているリソースの解放
 	// ------------------------------
-
-	// モデル関連
-	vertexResourceOwner.Reset();
-	vertexResource2Owner.Reset();
-	wvpResourceOwner.Reset();
-	wvpResource2Owner.Reset();
-	materialResourceOwner.Reset();
 
 	// Particle関連
 	particleVertexResourceOwner.Reset();
@@ -2204,6 +1900,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	directionalLightResourceOwner.Reset();
 	pointLightResourceOwner.Reset();
 	spotLightResourceOwner.Reset();
+
+	// Object3dが所有するWVPを解放
+	sphereObject.Finalize();
+	object1.Finalize();
+	object2.Finalize();
+
+	// ModelManagerがモデルと頂点リソースを解放
+	modelManager.Finalize();
+
+	// 3D共通RootSignature・PSOを解放
+	object3dCommon.Finalize();
 
 	// TextureManagerの終了
 	textureManager.Finalize();
