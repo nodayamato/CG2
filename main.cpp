@@ -10,8 +10,10 @@
 #include "Audio.h"
 #include "Input.h"
 #include "DebugCamera.h"
+#include "Camera.h"
 #include "BlendMode.h"
 #include "ParticleSystem.h"
+#include "ParticleManager.h"
 #include "WinApp.h"
 #include "DirectXCommon.h"
 #include "Logger.h"
@@ -160,6 +162,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// デバッグカメラ初期化
 	debugCamera.Initialize();
 
+	// カメラの初期化
+	Camera camera;
+	camera.Initialize();
+
+	// ------------------------------
+	// Camera切り替え用
+	// ------------------------------
+
+	// true : DebugCamera
+	// false : 通常Camera
+	bool useDebugCamera = true;
+
+	// 通常Cameraの座標
+	Vector3 cameraPosition = {
+		0.0f, 0.0f, -50.0f
+	};
+
+	// 通常Cameraの回転
+	Vector3 cameraRotation = {
+		0.0f, 0.0f, 0.0f
+	};
+
 	// ------------------------------
 	// ウィンドウ関連の初期化
 	// ------------------------------
@@ -297,479 +321,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 音声を再生する
 	audio.PlayWave();
 
-	// ---------------------------------
-	// Particle用シェーダー
-	// ---------------------------------
+	// --------------------------------------
+	// ParticleManagerの初期化
+	// --------------------------------------
 
-	// Particle VertexShader
-	Microsoft::WRL::ComPtr<IDxcBlob> particleVertexShaderBlob =
-		dxCommon.CompileShader(
-			L"Particle.VS.hlsl",
-			L"vs_6_0"
-		);
+	ParticleManager particleManager;
 
-	assert(particleVertexShaderBlob != nullptr);
-
-	// Particle PixelShader
-	Microsoft::WRL::ComPtr<IDxcBlob> particlePixelShaderBlob =
-		dxCommon.CompileShader(
-			L"Particle.PS.hlsl",
-			L"ps_6_0"
-		);
-
-	assert(particlePixelShaderBlob != nullptr);
-
-	// -----------------
-	// Particle用RootSignature
-	// -----------------
-
-	D3D12_ROOT_SIGNATURE_DESC particleRootSignatureDesc{};
-	particleRootSignatureDesc.Flags =
-		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-	// -----------------
-	// DescriptorRange
-	// -----------------
-
-	// Instancing用 SRV
-	D3D12_DESCRIPTOR_RANGE descriptorRangeForInstancing[1] = {};
-	descriptorRangeForInstancing[0].BaseShaderRegister = 0;
-	descriptorRangeForInstancing[0].NumDescriptors = 1;
-	descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart =
-		D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-	// Texture用 SRV
-	D3D12_DESCRIPTOR_RANGE particleTextureDescriptorRange[1] = {};
-	particleTextureDescriptorRange[0].BaseShaderRegister = 0;
-	particleTextureDescriptorRange[0].NumDescriptors = 1;
-	particleTextureDescriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	particleTextureDescriptorRange[0].OffsetInDescriptorsFromTableStart =
-		D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-	// -----------------
-	// RootParameter
-	// -----------------
-
-	D3D12_ROOT_PARAMETER particleRootParameters[3] = {};
-
-	// Material b0
-	particleRootParameters[0].ParameterType =
-		D3D12_ROOT_PARAMETER_TYPE_CBV;
-	particleRootParameters[0].ShaderVisibility =
-		D3D12_SHADER_VISIBILITY_PIXEL;
-	particleRootParameters[0].Descriptor.ShaderRegister = 0;
-
-	// Instancing t0
-	particleRootParameters[1].ParameterType =
-		D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	particleRootParameters[1].ShaderVisibility =
-		D3D12_SHADER_VISIBILITY_VERTEX;
-	particleRootParameters[1].DescriptorTable.pDescriptorRanges =
-		descriptorRangeForInstancing;
-	particleRootParameters[1].DescriptorTable.NumDescriptorRanges =
-		_countof(descriptorRangeForInstancing);
-
-	// Texture t0
-	particleRootParameters[2].ParameterType =
-		D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	particleRootParameters[2].ShaderVisibility =
-		D3D12_SHADER_VISIBILITY_PIXEL;
-	particleRootParameters[2].DescriptorTable.pDescriptorRanges =
-		particleTextureDescriptorRange;
-	particleRootParameters[2].DescriptorTable.NumDescriptorRanges =
-		_countof(particleTextureDescriptorRange);
-
-	// -----------------
-	// Sampler
-	// -----------------
-
-	D3D12_STATIC_SAMPLER_DESC particleStaticSamplers[1] = {};
-
-	particleStaticSamplers[0].Filter =
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	particleStaticSamplers[0].AddressU =
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	particleStaticSamplers[0].AddressV =
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	particleStaticSamplers[0].AddressW =
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	particleStaticSamplers[0].ComparisonFunc =
-		D3D12_COMPARISON_FUNC_NEVER;
-	particleStaticSamplers[0].MaxLOD =
-		D3D12_FLOAT32_MAX;
-	particleStaticSamplers[0].ShaderRegister = 0;
-	particleStaticSamplers[0].ShaderVisibility =
-		D3D12_SHADER_VISIBILITY_PIXEL;
-
-	particleRootSignatureDesc.pParameters =
-		particleRootParameters;
-	particleRootSignatureDesc.NumParameters =
-		_countof(particleRootParameters);
-
-	particleRootSignatureDesc.pStaticSamplers =
-		particleStaticSamplers;
-	particleRootSignatureDesc.NumStaticSamplers =
-		_countof(particleStaticSamplers);
-
-	// ------------------------------------
-	// Particle用RootSignature
-	// ------------------------------------
-
-	Microsoft::WRL::ComPtr<ID3DBlob>
-		particleSignatureBlob;
-
-	Microsoft::WRL::ComPtr<ID3DBlob>
-		particleErrorBlob;
-
-	hr = D3D12SerializeRootSignature(
-		&particleRootSignatureDesc,
-		D3D_ROOT_SIGNATURE_VERSION_1,
-		particleSignatureBlob.GetAddressOf(),
-		particleErrorBlob.GetAddressOf()
+	particleManager.Initialize(
+		&dxCommon,
+		&srvManager
 	);
 
-	if (FAILED(hr)) {
-		if (particleErrorBlob != nullptr) {
-			Logger::Log(reinterpret_cast<const char*>(
-				particleErrorBlob->GetBufferPointer()
-				));
-		}
-		assert(false);
-	}
-
-	assert(SUCCEEDED(hr));
-
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> particleRootSignatureOwner;
-
-	hr = device->CreateRootSignature(
-		0,
-		particleSignatureBlob->GetBufferPointer(),
-		particleSignatureBlob->GetBufferSize(),
-		IID_PPV_ARGS(
-			particleRootSignatureOwner.GetAddressOf()
-		)
-	);
-
-	assert(SUCCEEDED(hr));
-
-	// 既存の描画処理で使うポインタ
-	ID3D12RootSignature* particleRootSignature = particleRootSignatureOwner.Get();
-
-	// InputLayout
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
-	// 頂点座標
-	inputElementDescs[0].SemanticName = "POSITION";
-	inputElementDescs[0].SemanticIndex = 0;
-	inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	inputElementDescs[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-	// テクスチャ座標
-	inputElementDescs[1].SemanticName = "TEXCOORD";
-	inputElementDescs[1].SemanticIndex = 0;
-	inputElementDescs[1].Format = DXGI_FORMAT_R32G32_FLOAT;
-	inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-	// 法線
-	inputElementDescs[2].SemanticName = "NORMAL";
-	inputElementDescs[2].SemanticIndex = 0;
-	inputElementDescs[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-	inputElementDescs[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
-
-	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
-	inputLayoutDesc.pInputElementDescs = inputElementDescs;
-	inputLayoutDesc.NumElements = _countof(inputElementDescs);
-
-	// -----------------
-	// BlendState
-	// -----------------
-
-	D3D12_BLEND_DESC blendDesc[kCountOfBlendMode]{};
-
-	for (uint32_t i = 0; i < kCountOfBlendMode; ++i) {
-		blendDesc[i].RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-		blendDesc[i].RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-		blendDesc[i].RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-		blendDesc[i].RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
-	}
-
-	// ブレンドなし
-	blendDesc[kBlendModeNone].RenderTarget[0].BlendEnable = FALSE;
-
-	// 通常ブレンド
-	blendDesc[kBlendModeNormal].RenderTarget[0].BlendEnable = TRUE;
-	blendDesc[kBlendModeNormal].RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-	blendDesc[kBlendModeNormal].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	blendDesc[kBlendModeNormal].RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
-
-	// 加算ブレンド
-	blendDesc[kBlendModeAdd].RenderTarget[0].BlendEnable = TRUE;
-	blendDesc[kBlendModeAdd].RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-	blendDesc[kBlendModeAdd].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	blendDesc[kBlendModeAdd].RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-
-	// 減算ブレンド
-	blendDesc[kBlendModeSub].RenderTarget[0].BlendEnable = TRUE;
-	blendDesc[kBlendModeSub].RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
-	blendDesc[kBlendModeSub].RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
-	blendDesc[kBlendModeSub].RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-
-	// 乗算ブレンド
-	blendDesc[kBlendModeMul].RenderTarget[0].BlendEnable = TRUE;
-	blendDesc[kBlendModeMul].RenderTarget[0].SrcBlend = D3D12_BLEND_ZERO;
-	blendDesc[kBlendModeMul].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	blendDesc[kBlendModeMul].RenderTarget[0].DestBlend = D3D12_BLEND_SRC_COLOR;
-
-	// スクリーンブレンド
-	blendDesc[kBlendModeScreen].RenderTarget[0].BlendEnable = TRUE;
-	blendDesc[kBlendModeScreen].RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
-	blendDesc[kBlendModeScreen].RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	blendDesc[kBlendModeScreen].RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-
-	// RasterizerState
-	D3D12_RASTERIZER_DESC rasterizerDesc{};
-
-	// 裏面カリング
-	rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
-
-	// 塗りつぶす
-	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
-
-	// DepthStencilStateの設定
-	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
-
-	// Depthの機能を有効にする
-	depthStencilDesc.DepthEnable = true;
-
-	// 深度値を書き込む
-	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-
-	// 比較関数はLessEqual
-	// すでに書き込まれている深度値と同じか、より手前なら描画する
-	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-
-	// ------------------------------
-	// Particle用PSOの基本設定
-	// ------------------------------
-
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC particlePipelineStateDesc{};
-
-	// Particle用RootSignature
-	particlePipelineStateDesc.pRootSignature = particleRootSignature;
-
-	// 頂点入力情報
-	particlePipelineStateDesc.InputLayout = inputLayoutDesc;
-
-	// Rasterizer
-	particlePipelineStateDesc.RasterizerState = rasterizerDesc;
-
-	// DepthStencil
-	particlePipelineStateDesc.DepthStencilState = depthStencilDesc;
-
-	// DSV
-	particlePipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-
-	// RenderTarget
-	particlePipelineStateDesc.NumRenderTargets = 1;
-
-	particlePipelineStateDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-
-	// TriangleList
-	particlePipelineStateDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-
-	// サンプル設定
-	particlePipelineStateDesc.SampleDesc.Count = 1;
-
-	particlePipelineStateDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
-
-	// -----------------
-	// Particle用PSO
-	// -----------------
-
-	// Particleは両面描画
-	particlePipelineStateDesc.RasterizerState.CullMode =
-		D3D12_CULL_MODE_NONE;
-
-	particlePipelineStateDesc.DepthStencilState.DepthWriteMask =
-		D3D12_DEPTH_WRITE_MASK_ZERO;
-
-	particlePipelineStateDesc.pRootSignature =
-		particleRootSignature;
-
-	particlePipelineStateDesc.VS = {
-		particleVertexShaderBlob->GetBufferPointer(),
-		particleVertexShaderBlob->GetBufferSize()
-	};
-
-	particlePipelineStateDesc.PS = {
-		particlePixelShaderBlob->GetBufferPointer(),
-		particlePixelShaderBlob->GetBufferSize()
-	};
-
-	// ParticleはNormalブレンド
-	particlePipelineStateDesc.BlendState = blendDesc[kBlendModeNormal];
-
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> particlePipelineStateOwner;
-
-	hr = device->CreateGraphicsPipelineState(
-		&particlePipelineStateDesc,
-		IID_PPV_ARGS(
-			particlePipelineStateOwner.GetAddressOf()
-		)
-	);
-
-	assert(SUCCEEDED(hr));
-
-	// 描画処理で使う通常ポインタ
-	ID3D12PipelineState* particlePipelineState = particlePipelineStateOwner.Get();
-
-	// 現在のブレンドモード
+	// 3Dモデル用ブレンドモード
 	BlendMode blendMode = kBlendModeNormal;
 
-	// ------------------------------
-	// Particle用のModelData
-	// ------------------------------
-
-	ModelData particleModelData;
-
-	// 左上
-	particleModelData.vertices.push_back({
-		.position = {-1.0f, 1.0f, 0.0f, 1.0f},
-		.texcoord = {0.0f, 0.0f},
-		.normal = {0.0f, 0.0f, -1.0f}
-		});
-
-	// 右上
-	particleModelData.vertices.push_back({
-		.position = {1.0f, 1.0f, 0.0f, 1.0f},
-		.texcoord = {1.0f, 0.0f},
-		.normal = {0.0f, 0.0f, -1.0f}
-		});
-
-	// 左下
-	particleModelData.vertices.push_back({
-		.position = {-1.0f, -1.0f, 0.0f, 1.0f},
-		.texcoord = {0.0f, 1.0f},
-		.normal = {0.0f, 0.0f, -1.0f}
-		});
-
-	// 左下
-	particleModelData.vertices.push_back({
-		.position = {-1.0f, -1.0f, 0.0f, 1.0f},
-		.texcoord = {0.0f, 1.0f},
-		.normal = {0.0f, 0.0f, -1.0f}
-		});
-
-	// 右上
-	particleModelData.vertices.push_back({
-		.position = {1.0f, 1.0f, 0.0f, 1.0f},
-		.texcoord = {1.0f, 0.0f},
-		.normal = {0.0f, 0.0f, -1.0f}
-		});
-
-	// 右下
-	particleModelData.vertices.push_back({
-		.position = {1.0f, -1.0f, 0.0f, 1.0f},
-		.texcoord = {1.0f, 1.0f},
-		.normal = {0.0f, 0.0f, -1.0f}
-		});
-
-	// -----------------
-	// Particle用VertexResource
-	// -----------------
-
-	auto particleVertexResourceOwner =
-		dxCommon.CreateBufferResource(
-			sizeof(VertexData) * particleModelData.vertices.size()
-		);
-
-	ID3D12Resource* particleVertexResource =particleVertexResourceOwner.Get();
-
-	// -----------------
-	// Particle用VertexBufferView
-	// -----------------
-
-	D3D12_VERTEX_BUFFER_VIEW particleVertexBufferView{};
-
-	particleVertexBufferView.BufferLocation =
-		particleVertexResource->GetGPUVirtualAddress();
-
-	particleVertexBufferView.SizeInBytes =
-		static_cast<UINT>(
-			sizeof(VertexData) * particleModelData.vertices.size()
-			);
-
-	particleVertexBufferView.StrideInBytes =
-		sizeof(VertexData);
-
-	// -----------------
-	// Particle頂点データ
-	// -----------------
-
-	VertexData* particleVertexData = nullptr;
-
-	HRESULT particleVertexMapResult =
-		particleVertexResource->Map(
-			0,
-			nullptr,
-			reinterpret_cast<void**>(&particleVertexData)
-		);
-
-	assert(SUCCEEDED(particleVertexMapResult));
-
-	std::memcpy(
-		particleVertexData,
-		particleModelData.vertices.data(),
-		sizeof(VertexData) * particleModelData.vertices.size()
-	);
-
-	// -----------------
-	// Instancing
-	// -----------------
-
-	// Instancing用Resource
-	auto instancingResourceOwner =
-		dxCommon.CreateBufferResource(
-			sizeof(ParticleForGPU) * ParticleSystem::kNumMaxInstance
-		);
-
-	ID3D12Resource* instancingResource = instancingResourceOwner.Get();
-
-	// 書き込み先
-	ParticleForGPU* instancingData = nullptr;
-
-	instancingResource->Map(
-		0,
-		nullptr,
-		reinterpret_cast<void**>(&instancingData)
-	);
-
-	// 初期化
-	for (uint32_t index = 0;
-		index < ParticleSystem::kNumMaxInstance;
-		++index) {
-
-		instancingData[index].WVP =
-			MakeIdentity4x4();
-
-		instancingData[index].World =
-			MakeIdentity4x4();
-
-		instancingData[index].color = {
-			1.0f, 1.0f, 1.0f, 1.0f
-		};
-
-		instancingData[index].dissolveThreshold = 0.0f;
-	}
-
-	// -----------------
-	// ParticleSystem
-	// -----------------
-	ParticleSystem particleSystem;
-
-	particleSystem.Initialize();
-
-	// -----------------
+	// --------------------------------------
 	// AccelerationField
-	// -----------------
+	// --------------------------------------
 	AccelerationField accelerationField{};
 
 	accelerationField.acceleration = {
@@ -790,7 +358,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		1.0f
 	};
 
-	particleSystem.SetAccelerationField(
+	particleManager.SetAccelerationField(
 		accelerationField
 	);
 
@@ -1046,30 +614,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		{0.0f, 0.0f, 0.0f}
 	};
 
-	// -----------------
-	// Particle用Material
-	// -----------------
-
-	auto particleMaterialResourceOwner = dxCommon.CreateBufferResource(256);
-	ID3D12Resource* particleMaterialResource = particleMaterialResourceOwner.Get();
-
-	Material* particleMaterialData = nullptr;
-
-	particleMaterialResource->Map(
-		0,
-		nullptr,
-		reinterpret_cast<void**>(&particleMaterialData)
-	);
-
-	// 初期値
-	particleMaterialData->color = {
-		1.0f, 1.0f, 1.0f, 1.0f
-	};
-
-	particleMaterialData->enableLighting = false;
-	particleMaterialData->shininess = 32.0f;
-	particleMaterialData->uvTransform = MakeIdentity4x4();
-
 	// ------------------------------
 	// Camera用Resource
 	// ------------------------------
@@ -1212,51 +756,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// どちらのTextureを使うか
 	bool useMonsterBall = true;
 
-	// -----------------
-	// Instancing用SRV
-	// -----------------
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
-
-	instancingSrvDesc.Format =
-		DXGI_FORMAT_UNKNOWN;
-
-	instancingSrvDesc.Shader4ComponentMapping =
-		D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-	instancingSrvDesc.ViewDimension =
-		D3D12_SRV_DIMENSION_BUFFER;
-
-	instancingSrvDesc.Buffer.FirstElement = 0;
-
-	instancingSrvDesc.Buffer.Flags =
-		D3D12_BUFFER_SRV_FLAG_NONE;
-
-	instancingSrvDesc.Buffer.NumElements =
-		ParticleSystem::kNumMaxInstance;
-
-	instancingSrvDesc.Buffer.StructureByteStride =
-		sizeof(ParticleForGPU);
-
 	// -------------------------------------
-	// Particle用SRV
+	// Particle描画用テクスチャ設定
 	// -------------------------------------
 
-	// 既存のParticleは3番を使用
-	constexpr uint32_t kParticleSrvIndex = 3;
-
-	// CPUハンドルをSrvManagerから取得
-	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = srvManager.GetCPUDescriptorHandle(kParticleSrvIndex);
-
-	// GPUハンドルをSrvManagerから取得
-	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = srvManager.GetGPUDescriptorHandle(kParticleSrvIndex);
-
-	// SRV作成
-	device->CreateShaderResourceView(
-		instancingResource,
-		&instancingSrvDesc,
-		instancingSrvHandleCPU
+	// circle.pngをParticleに設定
+	particleManager.SetTextureHandle(
+		textureManager.GetGPUHandle(
+			circleTextureIndex
+		)
 	);
+
+	// -------------------------------------
+	// 2つ目のParticleグループを作成
+	// -------------------------------------
+
+	// monsterBall.pngを使用するグループ
+	particleManager.CreateParticleGroup(
+		"monster",
+		textureManager.GetGPUHandle(
+			monsterTextureIndex
+		)
+	);
+
+	// monsterグループ用Emitter
+	Emitter monsterEmitter = emitter;
+
+	// circleと違う位置に発生
+	monsterEmitter.transform.translate = {
+		4.0f, 0.0f, 0.0f
+	};
+
+	// 発生タイマーは別々に管理
+	monsterEmitter.frequencyTime = 0.0f;
 
 	// -------------------------------------
 	// Object3dCommon初期化
@@ -1264,6 +796,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Object3dCommon object3dCommon;
 	object3dCommon.Initialize(&dxCommon);
+
+	// 共通Cameraを登録
+	object3dCommon.SetDefaultCamera(&camera);
 
 	// -------------------------------------
 	// ModelManager初期化
@@ -1432,58 +967,79 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			OutputDebugStringA("Hit 0\n");
 		}
 
-		// ------------------------------
-		// デバッグカメラ更新
-		// ------------------------------
+		// ------------------------------------
+		// Camera更新
+		// ------------------------------------
 
+		// ImGuiがマウス操作中か確認
 		bool isImGuiUsingMouse = false;
 
 #ifdef USE_IMGUI
-
-		// ImGuiがマウス入力を使っているか
 		isImGuiUsingMouse = ImGui::GetIO().WantCaptureMouse;
-
 #endif
 
-		// ImGui操作中はCameraを動かさない
-		if (!isImGuiUsingMouse) {
-			debugCamera.Update(input);
+		if (useDebugCamera) {
+
+			// ---------------------------------
+			// DebugCameraを使用
+			// ---------------------------------
+
+			if (!isImGuiUsingMouse) {
+				debugCamera.Update(input);
+			}
+
+			// DebugCameraのView行列を共通Cameraへ反映
+			camera.SetViewMatrix(
+				debugCamera.GetViewMatrix()
+			);
+
+		}
+		else {
+
+			// ---------------------------------
+			// 通常Cameraを使用
+			// ---------------------------------
+
+			// 座標を設定
+			camera.SetTranslate(cameraPosition);
+
+			// 回転を設定
+			camera.SetRotate(cameraRotation);
+
+			// 行列を更新
+			camera.Update();
 		}
 
-		// Camera位置をGPUへ送る
-		cameraData->worldPosition = debugCamera.GetWorldPosition();
+		// Cameraの座標をGPUに送る
+		cameraData->worldPosition =
+			camera.GetTranslate();
 
 		// ------------------------------------
-		// 3Dオブジェクト用行列更新
+		// 共通Cameraの行列を取得
+		// Particle描画でも使用する
 		// ------------------------------------
 
-		// DebugCameraから行列を取得
-		Matrix4x4 viewMatrix = debugCamera.GetViewMatrix();
+		Matrix4x4 viewMatrix =
+			camera.GetViewMatrix();
 
-		Matrix4x4 projectionMatrix = debugCamera.GetProjectionMatrix();
+		Matrix4x4 projectionMatrix =
+			camera.GetProjectionMatrix();
 
-		// 今までのTransformを球に反映
+		// ------------------------------------
+		// 3Dオブジェクト更新
+		// ------------------------------------
+
+		// 球のTransformを反映
 		sphereObject.SetTransform(transform);
 
-		// 球のワールド行列とWVPを更新
-		sphereObject.Update(
-			viewMatrix,
-			projectionMatrix
-		);
+		// 球
+		sphereObject.Update();
 
-		// ------------------------------------
-		// Object3dごとの行列更新
-		// ------------------------------------
+		// plane
+		object1.Update();
 
-		object1.Update(
-			viewMatrix,
-			projectionMatrix
-		);
-
-		object2.Update(
-			viewMatrix,
-			projectionMatrix
-		);
+		// fence
+		object2.Update();
 
 		// -----------------
 		// BillboardMatrix
@@ -1542,25 +1098,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		if (emitter.frequency <=
 			emitter.frequencyTime) {
 
-			particleSystem.Emit(
+			particleManager.Emit(
 				emitter
 			);
 
 			emitter.frequencyTime -= emitter.frequency;
 		}
 
+		// ------------------------------
+		// monsterグループの発生処理
+		// ------------------------------
+
+		monsterEmitter.frequencyTime += kDeltaTime;
+
+		if (monsterEmitter.frequency <=
+			monsterEmitter.frequencyTime) {
+
+			particleManager.Emit(
+				"monster",
+				monsterEmitter
+			);
+
+			monsterEmitter.frequencyTime -=
+				monsterEmitter.frequency;
+		}
+
 		// Particle更新
-		particleSystem.Update(
+		particleManager.Update(
 			viewProjectionMatrix,
 			billboardMatrix,
-			instancingData,
 			kDeltaTime,
 			useBillboard,
 			useAccelerationField
 		);
-
-		// 描画するParticle数
-		uint32_t numInstance = particleSystem.GetNumInstance();
 
 		// -----------------
 		// Particle UVAnimation
@@ -1601,7 +1171,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			);
 
 		// GPUへ送る
-		particleMaterialData->uvTransform = particleUVMatrix;
+		particleManager.SetUVTransform(
+			particleUVMatrix
+		);
 
 		// ------------------------------------
 		// Sprite更新
@@ -1711,6 +1283,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		spotLightData->cosAngle = std::cos(spotLightAngle * std::numbers::pi_v<float> / 180.0f);
 		spotLightData->cosFalloffStart = std::cos(spotLightFalloffStartAngle * std::numbers::pi_v<float> / 180.0f);
 
+		// Camera操作
+		ImGui::SeparatorText("Camera");
+
+		// DebugCamera / 通常Camera切り替え
+		ImGui::Checkbox(
+			"Use DebugCamera",
+			&useDebugCamera
+		);
+
+		// 通常Camera使用中だけ座標・回転を編集
+		if (!useDebugCamera) {
+
+			ImGui::DragFloat3(
+				"Camera Position",
+				&cameraPosition.x,
+				0.1f
+			);
+
+			ImGui::DragFloat3(
+				"Camera Rotation",
+				&cameraRotation.x,
+				0.01f
+			);
+		}
+
 		ImGui::End();
 
 		// Light ON / OFFを反映
@@ -1802,61 +1399,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			object1.Draw();
 			object2.Draw();
 
-			// -----------------
+			// -------------------------------------
 			// Particle描画
-			// -----------------
+			// -------------------------------------
 
-			// Particle用RootSignature
-			commandList->SetGraphicsRootSignature(
-				particleRootSignature
-			);
+			particleManager.Draw();
 
-			// Particle用PSO
-			commandList->SetPipelineState(
-				particlePipelineState
-			);
-
-			// Particle用頂点バッファ
-			commandList->IASetVertexBuffers(
-				0,
-				1,
-				&particleVertexBufferView
-			);
-
-			// Material
-			commandList->SetGraphicsRootConstantBufferView(
-				0,
-				particleMaterialResource->GetGPUVirtualAddress()
-			);
-
-			// Instancing用StructuredBuffer
-			commandList->SetGraphicsRootDescriptorTable(
-				1,
-				instancingSrvHandleGPU
-			);
-
-			// uvChecker
-			commandList->SetGraphicsRootDescriptorTable(
-				2,
-				textureSrvHandleGPU
-			);
-
-			// 生存しているパーティクルだけ描画
-			//if (numInstance > 0) {
-
-			//	commandList->DrawInstanced(
-			//		static_cast<UINT>(
-			//			particleModelData.vertices.size()
-			//			),
-			//		numInstance,
-			//		0,
-			//		0
-			//	);
-			//}
-
-			// =====================================
+			// -------------------------------------
 			// Sprite描画
-			// =====================================
+			// -------------------------------------
 
 			// スプライト用RootSignature・PSOを設定
 			spriteCommon.CommonDraw();
@@ -1885,38 +1436,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		}
 	}
 
-	// ---------------------------------
-	// RootSignature・PSOの解放
-	// ---------------------------------
-
-	// Particle用PSO
-	particlePipelineStateOwner.Reset();
-
-	// Particle用RootSignature
-	particleRootSignatureOwner.Reset();
-
-	// Particle用シリアライズ結果
-	particleSignatureBlob.Reset();
-	particleErrorBlob.Reset();
-
-	// Particle用シェーダーを解放
-	particleVertexShaderBlob.Reset();
-	particlePixelShaderBlob.Reset();
-
-	// ------------------------------
-	// ComPtrで所有しているリソースの解放
-	// ------------------------------
-
-	// Particle関連
-	particleVertexResourceOwner.Reset();
-	instancingResourceOwner.Reset();
-	particleMaterialResourceOwner.Reset();
-
 	// Camera・Light関連
 	cameraResourceOwner.Reset();
 	directionalLightResourceOwner.Reset();
 	pointLightResourceOwner.Reset();
 	spotLightResourceOwner.Reset();
+
+	// ParticleManagerの終了処理
+	particleManager.Finalize();
 
 	// Object3dが所有するWVPを解放
 	sphereObject.Finalize();

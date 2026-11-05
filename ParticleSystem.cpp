@@ -42,17 +42,14 @@ void ParticleSystem::SetAccelerationField(
 // -----------------
 void ParticleSystem::Initialize() {
 
-	// -----------------
-	// 乱数生成器初期化
-	// -----------------
+	// 乱数生成器を初期化
 	std::random_device seedGenerator;
 	randomEngine_.seed(seedGenerator());
 
-	// -----------------
-	// Particle生成
-	// -----------------
-	AddParticles(3);
+	// Particleを初期化
+	particles_.clear();
 
+	// 描画数を初期化
 	numInstance_ = 0;
 }
 
