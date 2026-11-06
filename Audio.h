@@ -1,105 +1,81 @@
 #pragma once
+
 #include <Windows.h>
 #include <xaudio2.h>
 #include <wrl.h>
+
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #pragma comment(lib, "xaudio2.lib")
 
-/// <summary>
-/// 音声管理クラス
-/// </summary>
-class Audio
-{
+// =====================================
+// 音声管理クラス
+// =====================================
+class Audio {
 public:
-	/// <summary>
-	/// 初期化
-	/// </summary>
-	void Initialize();
 
-	/// <summary>
-	/// WAVファイルを読み込む
-	/// </summary>
-	/// <param name="filename">WAVファイルのパス</param>
-	void LoadWave(const std::string& filename);
+    // 初期化
+    void Initialize();
 
-	/// <summary>
-	/// 読み込んだ音声を再生する
-	/// </summary>
-	void PlayWave();
+    // WAV / MP3などを読み込む
+    void LoadSound(const std::string& filename);
 
-	/// <summary>
-	/// 終了処理
-	/// </summary>
-	void Finalize();
+    // 従来の呼び出し方法も残す
+    void LoadWave(const std::string& filename);
 
-	/// <summary>
-	/// デストラクタ
-	/// </summary>
-	~Audio();
+    // 読み込んだ音声を再生
+    void PlayWave();
+
+    // 終了処理
+    void Finalize();
+
+    // デストラクタ
+    ~Audio();
 
 private:
-	/// <summary>
-	/// チャンクヘッダ
-	/// </summary>
-	struct ChunkHeader
-	{
-		char id[4];
-		int32_t size;
-	};
 
-	/// <summary>
-	/// RIFFヘッダ
-	/// </summary>
-	struct RiffHeader
-	{
-		ChunkHeader chunk;
-		char type[4];
-	};
+    // =================================
+    // 音声データ
+    // =================================
+    struct SoundData {
 
-	/// <summary>
-	/// Formatチャンク
-	/// </summary>
-	struct FormatChunk
-	{
-		ChunkHeader chunk;
-		WAVEFORMATEX fmt;
-	};
+        // WAVEFORMATEX形式の情報
+        // 拡張フォーマットにも対応するため
+        // バイト配列で保持する
+        std::vector<BYTE> waveFormat;
 
-	/// <summary>
-	/// 音声データ
-	/// </summary>
-	struct SoundData
-	{
-		// 波形フォーマット
-		WAVEFORMATEX wfex{};
+        // デコード済みPCMデータ
+        std::vector<BYTE> pcmData;
 
-		// 音声データの先頭アドレス
-		BYTE* pBuffer = nullptr;
+        // 読み込んだファイル
+        std::string filename;
+    };
 
-		// 音声データのサイズ
-		unsigned int bufferSize = 0;
-	};
+    // 音声データを解放
+    void UnloadWave();
 
-	/// <summary>
-	/// 音声データを解放する
-	/// </summary>
-	void UnloadWave();
+    // 再生中のSourceVoiceを破棄
+    void DestroySourceVoice();
 
 private:
-	// XAudio2本体
-	Microsoft::WRL::ComPtr<IXAudio2> xAudio2_;
 
-	// 全ての音声の最終出力先
-	IXAudio2MasteringVoice* masterVoice_ = nullptr;
+    // XAudio2本体
+    Microsoft::WRL::ComPtr<IXAudio2> xAudio2_;
 
-	// 再生用SourceVoice
-	IXAudio2SourceVoice* sourceVoice_ = nullptr;
+    // 最終出力先
+    IXAudio2MasteringVoice* masterVoice_ = nullptr;
 
-	// 読み込んだ音声データ
-	SoundData soundData_{};
+    // 再生用Voice
+    IXAudio2SourceVoice* sourceVoice_ = nullptr;
 
-	// 初期化済みかどうか
-	bool isInitialized_ = false;
+    // 読み込んだ音声データ
+    SoundData soundData_{};
+
+    // 初期化済みか
+    bool isInitialized_ = false;
+
+    // Media Foundation初期化済みか
+    bool isMediaFoundationInitialized_ = false;
 };

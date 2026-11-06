@@ -309,14 +309,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12GraphicsCommandList* commandList = dxCommon.GetCommandList();
 
 	// --------------------------------------
-	// XAudio2初期化
+	// Audio初期化
 	// --------------------------------------
 
-	// XAudio2の初期化
+	// Audio初期化
 	audio.Initialize();
 
-	// WAVファイルを読み込む
-	audio.LoadWave("resources/Alarm01.wav");
+	// Media FoundationでPCMへ変換
+	audio.LoadSound("resources/Alarm01.wav");
 
 	// 音声を再生する
 	audio.PlayWave();
