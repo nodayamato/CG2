@@ -135,7 +135,7 @@ struct Game::Impl {
     D3DResourceLeakChecker leakChecker;
     Audio audio;
 
-    Input* input = nullptr;
+    std::unique_ptr<Input> input;
     DebugCamera debugCamera;
     Camera camera;
 
@@ -237,7 +237,7 @@ void Game::Impl::Initialize() {
     CoInitializeEx(0, COINIT_MULTITHREADED);
     SetUnhandledExceptionFilter(ExportDump);
 
-    input = new Input();
+    input = std::make_unique<Input>();
 
     debugCamera.Initialize();
     camera.Initialize();
@@ -762,14 +762,14 @@ void Game::Impl::Initialize() {
     // タイトルシーン
     sceneManager.RegisterScene(
         SceneType::Title,
-        std::make_unique<TitleScene>(input)
+        std::make_unique<TitleScene>(input.get())
     );
 
     // ゲームプレイシーン
     sceneManager.RegisterScene(
         SceneType::GamePlay,
         std::make_unique<GamePlayScene>(
-            input,
+            input.get(),
             [this]() {
                 UpdateGameplay();
             },
@@ -825,7 +825,7 @@ void Game::Impl::UpdateGameplay() {
     // Camera更新
     if (useDebugCamera) {
         if (!isImGuiUsingMouse) {
-            debugCamera.Update(input);
+            debugCamera.Update(input.get());
         }
 
         camera.SetViewMatrix(
@@ -1279,8 +1279,7 @@ void Game::Impl::Finalize() {
 
     winApp.Finalize();
 
-    delete input;
-    input = nullptr;
+    input.reset();
 
     audio.Finalize();
     Logger::Finalize();
