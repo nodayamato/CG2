@@ -1,4 +1,7 @@
 #include "Game.h"
+#include "SceneManager.h"
+#include "TitleScene.h"
+#include "GamePlayScene.h"
 
 #pragma warning(push)
 #pragma warning(disable:4023)
@@ -39,6 +42,7 @@
 #include <format>
 #include <ostream>
 #include <utility>
+#include <memory>
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -212,10 +216,18 @@ struct Game::Impl {
 
     bool isSpriteTextureUploadReleased = false;
 
+    // シーン管理
+    SceneManager sceneManager;
+
+    // ゲーム全体
     void Initialize();
     void Update();
     void Draw();
     void Finalize();
+
+    // ゲームプレイ専用処理
+    void UpdateGameplay();
+    void DrawGameplay();
 };
 
 // =====================================
@@ -742,15 +754,62 @@ void Game::Impl::Initialize() {
         });
 
     isSpriteTextureUploadReleased = false;
+
+    // ------------------------------------
+    // シーン登録
+    // ------------------------------------
+
+    // タイトルシーン
+    sceneManager.RegisterScene(
+        SceneType::Title,
+        std::make_unique<TitleScene>(input)
+    );
+
+    // ゲームプレイシーン
+    sceneManager.RegisterScene(
+        SceneType::GamePlay,
+        std::make_unique<GamePlayScene>(
+            input,
+            [this]() {
+                UpdateGameplay();
+            },
+            [this]() {
+                DrawGameplay();
+            }
+        )
+    );
+
+    // 最初はタイトルシーン
+    sceneManager.Initialize(SceneType::Title);
 }
 
 // =====================================
 // 更新
 // =====================================
 void Game::Impl::Update() {
+
+    // ウィンドウメッセージ処理
+    if (winApp.ProcessMessage()) {
+        return;
+    }
+
+    // ImGui開始
     imguiManager.Begin();
 
+    // 入力更新
     input->Update();
+
+    // 現在のシーンを更新
+    sceneManager.Update();
+
+    // ImGui終了
+    imguiManager.End();
+}
+
+// =====================================
+// ゲームプレイの更新
+// =====================================
+void Game::Impl::UpdateGameplay() {
 
     if (input->PushKey(DIK_0)) {
         OutputDebugStringA("Hit 0\n");
@@ -1108,7 +1167,6 @@ void Game::Impl::Update() {
         pointLightData->intensity = 0.0f;
     }
 
-    imguiManager.End();
 #endif
 }
 
@@ -1116,11 +1174,33 @@ void Game::Impl::Update() {
 // 描画
 // =====================================
 void Game::Impl::Draw() {
-    if (winApp.ProcessMessage()) {
+
+    if (winApp.IsEndRequested()) {
         return;
     }
 
+    // 描画開始
     dxCommon.PreDraw();
+
+    // 現在のシーンを描画
+    sceneManager.Draw();
+
+    // ImGui描画
+    imguiManager.Draw();
+
+    // 描画終了
+    dxCommon.PostDraw();
+
+    if (!isSpriteTextureUploadReleased) {
+        textureManager.ReleaseUploadResources();
+        isSpriteTextureUploadReleased = true;
+    }
+}
+
+// =====================================
+// ゲームプレイの描画
+// =====================================
+void Game::Impl::DrawGameplay() {
 
     object3dCommon.CommonDraw(blendMode);
 
@@ -1165,21 +1245,14 @@ void Game::Impl::Draw() {
 
     sprite1.Draw();
     sprite2.Draw();
-
-    imguiManager.Draw();
-
-    dxCommon.PostDraw();
-
-    if (!isSpriteTextureUploadReleased) {
-        textureManager.ReleaseUploadResources();
-        isSpriteTextureUploadReleased = true;
-    }
 }
 
 // =====================================
 // 終了処理
 // =====================================
 void Game::Impl::Finalize() {
+    // シーン管理終了
+    sceneManager.Finalize();
     cameraResourceOwner.Reset();
     directionalLightResourceOwner.Reset();
     pointLightResourceOwner.Reset();
