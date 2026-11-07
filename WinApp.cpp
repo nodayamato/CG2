@@ -87,27 +87,26 @@ bool WinApp::ProcessMessage() {
 
     MSG msg{};
 
-    // メッセージがなければfalse
-    if (!PeekMessage(
+    // 溜まっているメッセージをすべて処理
+    while (PeekMessage(
         &msg,
         nullptr,
         0,
         0,
         PM_REMOVE)) {
 
-        return false;
+        // 終了メッセージ
+        if (msg.message == WM_QUIT) {
+            isEndRequested_ = true;
+            return true;
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
-    // 終了メッセージ
-    if (msg.message == WM_QUIT) {
-        isEndRequested_ = true;
-        return true;
-    }
-
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
-
-    return true;
+    // 通常のメッセージでは更新を止めない
+    return false;
 }
 
 // 終了処理
