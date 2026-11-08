@@ -45,6 +45,16 @@ public:
 	/// </summary>
 	bool PushMouse(uint8_t buttonNumber);
 
+	/// </summary>
+	/// マウスボタンを押した瞬間
+	/// </summary>
+	bool TriggerMouse(uint8_t buttonNumber);
+
+	/// </summary>
+	/// ウィンドウ内のマウス座標
+	/// </summary>
+	POINT GetMousePosition() const;
+
 	/// <summary>
 	/// マウスのX移動量
 	/// </summary>
@@ -87,4 +97,10 @@ private:
 
 	// マウス状態
 	DIMOUSESTATE2 mouseState_{};
+
+	// 前フレームのマウス状態
+	DIMOUSESTATE2 preMouseState_{};
+
+	// ウィンドウハンドル
+	HWND hwnd_ = nullptr;
 };
