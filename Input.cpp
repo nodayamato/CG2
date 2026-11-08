@@ -4,6 +4,8 @@
 
 void Input::Initialize(HINSTANCE hInstance, HWND hwnd)
 {
+	hwnd_ = hwnd;
+
 	HRESULT hr;
 
 	// ------------------------------
@@ -109,6 +111,9 @@ void Input::Update()
 	// マウス更新
 	// ------------------------------
 
+	// 前フレームのマウス状態を保存
+	preMouseState_ = mouseState_;
+
 	// 毎フレームリセット
 	mouseState_ = {};
 
@@ -166,4 +171,39 @@ bool Input::PushMouse(uint8_t buttonNumber)
 
 	return
 		(mouseState_.rgbButtons[buttonNumber] & 0x80) != 0;
+}
+
+// ------------------------------
+// マウスを押した瞬間
+// ------------------------------
+bool Input::TriggerMouse(uint8_t buttonNumber)
+{
+	if (buttonNumber >= 8) {
+		return false;
+	}
+
+	bool current =
+		(mouseState_.rgbButtons[buttonNumber] & 0x80) != 0;
+
+	bool previous =
+		(preMouseState_.rgbButtons[buttonNumber] & 0x80) != 0;
+
+	return current && !previous;
+}
+
+// ------------------------------
+// ウィンドウ内のマウス座標
+// ------------------------------
+POINT Input::GetMousePosition() const
+{
+	POINT point{};
+
+	GetCursorPos(&point);
+
+	ScreenToClient(
+		hwnd_,
+		&point
+	);
+
+	return point;
 }
