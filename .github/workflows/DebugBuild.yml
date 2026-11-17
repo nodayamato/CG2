@@ -29,8 +29,4 @@ jobs:
     - name: Build
       run: |
         msbuild ${{env.SOLUTION_FILE_PATH}} /p:Platform=x64,Configuration=${{env.CONFIGURATION}}
-
-      # ビルド
-      - name: Build
-        run: |
-          msbuild "${{ env.SOLUTION_FILE_PATH }}" /p:Platform=x64,Configuration=${{ env.CONFIGURATION }}
+        
