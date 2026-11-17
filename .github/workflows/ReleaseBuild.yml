@@ -1,8 +1,8 @@
 name: ReleaseBuild
 on:
-　push:
-　　branches:
-　　　- master
+ push:
+   branches:
+    - master
    
 env:
   # ソリューションファイルのパス
@@ -12,19 +12,20 @@ env:
 
 jobs:
   build:
-    runs-on: windows-2025-vs2026
+   runs-on: windows-2025-vs2026
 
-    steps:
+   steps:
       # リポジトリの取得
-      - name: Checkout
-        uses: actions/checkout@v6
+    - name: Checkout
+      uses: actions/checkout@v6
 
       # MSBuildの設定
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v3
-        with:
-          msbuild-architecture: x64
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v3
+      with:
+         msbuild-architecture: x64
 
       # ビルド
-      - name: Build
-        run: msbuild ${{env.SOLUTION_FILE_PATH}} /p:Platform=x64,Configuration=${{env.CONFIGURATION}}
+    - name: Build
+      run: |
+        msbuild ${{env.SOLUTION_FILE_PATH}} /p:Platform=x64,Configuration=${{env.CONFIGURATION}}
