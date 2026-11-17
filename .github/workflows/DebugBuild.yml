@@ -1,31 +1,60 @@
+
 name: DebugBuild
+
 on:
- push:
-   branches:
-    - master
-   
+  push:
+    branches:
+      - master
+
 env:
   # ソリューションファイルのパス
   SOLUTION_FILE_PATH: project/CG3.slnx
+
   # ビルド構成
   CONFIGURATION: Debug
 
 jobs:
   build:
-   runs-on: windows-2025-vs2026
+    runs-on: windows-2025-vs2026
 
-   steps:
+    steps:
       # リポジトリの取得
-    - name: Checkout
-      uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # Assimpのライブラリを検索
+      - name: Find Assimp Libraries
+        shell: pwsh
+        run: |
+          Write-Host "=== Assimp Library Search ==="
+
+          $libs = @(
+            Get-ChildItem -Path . -Recurse -File -Filter "*assimp*.lib"
+          )
+
+          if ($libs.Count -eq 0) {
+            Write-Host "No Assimp libraries found."
+          }
+          else {
+            foreach ($lib in $libs) {
+              Write-Host $lib.FullName
+            }
+          }
+
+          Write-Host "=== Check Debug Library ==="
+
+          $expected = "project/externals/assimp/lib/Debug/assimp-vc143-mtd.lib"
+
+          Write-Host "Expected path: $expected"
+          Write-Host "Exists: $(Test-Path $expected)"
 
       # MSBuildの設定
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v3
-      with:
-         msbuild-architecture: x64
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+        with:
+          msbuild-architecture: x64
 
       # ビルド
-    - name: Build
-      run: |
-        msbuild ${{env.SOLUTION_FILE_PATH}} /p:Platform=x64,Configuration=${{env.CONFIGURATION}}
+      - name: Build
+        run: |
+          msbuild "${{ env.SOLUTION_FILE_PATH }}" /p:Platform=x64,Configuration=${{ env.CONFIGURATION }}
