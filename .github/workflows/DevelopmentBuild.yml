@@ -6,7 +6,7 @@ on:
    
 env:
   # ソリューションファイルのパス
-  SOLUTION_FILE_PATH: CG3.slnx
+  SOLUTION_FILE_PATH: project/CG3.slnx
   # ビルド構成
   CONFIGURATION: Development
 
