@@ -18,15 +18,6 @@ jobs:
       # リポジトリの取得
     - name: Checkout
       uses: actions/checkout@v6
-      
-      # Assimpのライブラリを検索
-    - name: Find Assimp Libraries
-      shell: pwsh
-      run: |
-        Write-Host "Searching for Assimp libraries..."
-
-        Get-ChildItem -Path . -Recurse -File -Filter "*assimp*.lib" |
-          Select-Object -ExpandProperty FullName
 
       # MSBuildの設定
     - name: Add MSBuild to PATH
